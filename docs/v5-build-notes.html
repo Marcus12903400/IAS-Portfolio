@@ -1,0 +1,401 @@
+<title>AutoDeck v5 Build Notes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#FBFAF6; --surface:#FFFFFF; --sunk:#F3F0E9;
+    --ink:#201C16; --body:#3B352C; --muted:#6E6558; --hair:#DFD8CB;
+    --teak:#A9683A; --teak-soft:#F0E2D5; --marine:#17394D; --marine-soft:#E3ECF1;
+    --good:#2E7D5B; --warn:#B4761E; --bad:#A8352C;
+    --good-soft:#E2EFE8; --warn-soft:#F7EBD8; --bad-soft:#F6E4E1;
+    --shadow:0 1px 2px rgba(32,28,22,.06), 0 8px 24px -12px rgba(32,28,22,.14);
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --ground:#14120E; --surface:#1D1A15; --sunk:#252119;
+    --ink:#F4EFE5; --body:#D8D0C2; --muted:#A29785; --hair:#332E26;
+    --teak:#D08C55; --teak-soft:#3A2A1C; --marine:#8FBDD6; --marine-soft:#1B2C36;
+    --good:#67B891; --warn:#DFA85C; --bad:#E08A80;
+    --good-soft:#1C2E26; --warn-soft:#332614; --bad-soft:#34211F;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }}
+  :root[data-theme="dark"]{
+    --ground:#14120E; --surface:#1D1A15; --sunk:#252119;
+    --ink:#F4EFE5; --body:#D8D0C2; --muted:#A29785; --hair:#332E26;
+    --teak:#D08C55; --teak-soft:#3A2A1C; --marine:#8FBDD6; --marine-soft:#1B2C36;
+    --good:#67B891; --warn:#DFA85C; --bad:#E08A80;
+    --good-soft:#1C2E26; --warn-soft:#332614; --bad-soft:#34211F;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground); color:var(--body);
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:16.5px; line-height:1.62; margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:0 28px 96px}
+  .col{max-width:70ch}
+
+  h1,h2,h3{font-family:Fraunces,Georgia,serif; color:var(--ink); text-wrap:balance; margin:0}
+  h1{font-size:clamp(2.3rem,5vw,3.4rem); font-weight:600; line-height:1.06; letter-spacing:-.02em}
+  h2{font-size:clamp(1.5rem,2.6vw,1.9rem); font-weight:600; line-height:1.15; letter-spacing:-.01em}
+  h3{font-size:1.09rem; font-weight:600; line-height:1.3}
+  p{margin:0 0 1.05em}
+  a{color:var(--teak)}
+  strong{color:var(--ink); font-weight:600}
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-size:.88em}
+  code{background:var(--sunk); padding:.12em .38em; border-radius:4px; color:var(--ink)}
+  .num{font-variant-numeric:tabular-nums}
+
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:.7rem; font-weight:500;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 .7rem
+  }
+
+  header.top{border-bottom:1px solid var(--hair); padding:60px 0 34px; margin-bottom:44px}
+  header.top .col{max-width:64ch}
+  .lede{font-size:1.16rem; color:var(--body); margin-top:1.1rem}
+
+  section{padding:44px 0; border-bottom:1px solid var(--hair)}
+  section:last-of-type{border-bottom:none}
+  .sechead{display:flex; align-items:baseline; gap:14px; margin-bottom:1.3rem}
+  .sechead .idx{
+    font-family:"IBM Plex Mono",monospace; font-size:.78rem; font-weight:600;
+    color:var(--teak); letter-spacing:.06em; flex:none; padding-top:.2em
+  }
+
+  /* headline figures */
+  .figs{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin:30px 0 4px}
+  .fig{background:var(--surface); border:1px solid var(--hair); border-radius:9px; padding:17px 18px; box-shadow:var(--shadow)}
+  .fig .k{font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; color:var(--muted)}
+  .fig .v{font-family:Fraunces,Georgia,serif; font-size:2rem; font-weight:600; color:var(--ink); line-height:1.1; margin-top:.34rem; font-variant-numeric:tabular-nums}
+  .fig .v small{font-size:.95rem; font-weight:400; color:var(--muted); font-family:"IBM Plex Sans",sans-serif}
+  .fig .n{font-size:.85rem; color:var(--muted); margin-top:.3rem}
+
+  /* timing table */
+  .tablewrap{overflow-x:auto; margin:22px 0 8px}
+  table{border-collapse:collapse; width:100%; min-width:600px; font-size:.93rem}
+  th{
+    font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:.68rem;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    text-align:right; padding:0 12px 9px; border-bottom:1px solid var(--hair)
+  }
+  th:first-child{text-align:left}
+  td{padding:9px 12px; border-bottom:1px solid var(--hair); text-align:right; font-variant-numeric:tabular-nums}
+  td:first-child{text-align:left; color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:.85rem}
+  tr:last-child td{border-bottom:none}
+  tr.total td{border-top:2px solid var(--ink); border-bottom:none; font-weight:600; color:var(--ink); padding-top:12px}
+  .bar{display:block; height:7px; border-radius:3px; background:var(--teak); min-width:2px}
+  .barcell{width:150px; text-align:left !important}
+  .gain{font-weight:600; color:var(--good)}
+  .flat{color:var(--muted)}
+
+  /* feature blocks */
+  .feat{background:var(--surface); border:1px solid var(--hair); border-left:3px solid var(--teak);
+        border-radius:0 9px 9px 0; padding:20px 22px; margin:18px 0; box-shadow:var(--shadow)}
+  .feat h3{margin-bottom:.5rem}
+  .feat p:last-child{margin-bottom:0}
+  .quote{border-left:2px solid var(--hair); padding-left:14px; color:var(--muted); font-style:italic; margin:0 0 1rem}
+
+  .spec{display:grid; grid-template-columns:auto 1fr; gap:6px 18px; margin:16px 0 4px; font-size:.93rem}
+  .spec dt{font-family:"IBM Plex Mono",monospace; font-size:.82rem; color:var(--muted); white-space:nowrap}
+  .spec dd{margin:0; color:var(--ink)}
+
+  /* finding cards */
+  .find{border:1px solid var(--hair); border-radius:9px; padding:18px 20px; margin:14px 0; background:var(--surface)}
+  .find .tag{
+    display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:.64rem; font-weight:600;
+    letter-spacing:.1em; text-transform:uppercase; padding:.24em .6em; border-radius:4px; margin-bottom:.6rem
+  }
+  .t-bad{background:var(--bad-soft); color:var(--bad)}
+  .t-warn{background:var(--warn-soft); color:var(--warn)}
+  .t-good{background:var(--good-soft); color:var(--good)}
+  .find h3{margin-bottom:.4rem}
+  .find p:last-child{margin-bottom:0}
+
+  ul{margin:0 0 1.05em; padding-left:1.15em}
+  li{margin-bottom:.42em}
+  li::marker{color:var(--teak)}
+
+  .note{background:var(--marine-soft); border-radius:9px; padding:18px 20px; margin:20px 0}
+  .note p:last-child{margin-bottom:0}
+  .note .eyebrow{color:var(--marine)}
+
+  footer{padding:34px 0 0; color:var(--muted); font-size:.9rem}
+  @media (max-width:640px){ .wrap{padding:0 20px 64px} body{font-size:16px} }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="col">
+    <p class="eyebrow">Overnight build &middot; 31 August 2026</p>
+    <h1>AutoDeck v5</h1>
+    <p class="lede">Three things you asked for — more CPU, texture, and seams with sheet nesting — plus
+    the reason nothing was opening in the first place, and four bugs found in the existing
+    cut geometry along the way.</p>
+  </div>
+
+  <div class="figs">
+    <div class="fig">
+      <div class="k">Key West scan, cold</div>
+      <div class="v">6:45</div>
+      <div class="n">was 13:02 &mdash; <span class="gain">1.93&times; faster</span></div>
+    </div>
+    <div class="fig">
+      <div class="k">CPU in use</div>
+      <div class="v">~50<small> %</small></div>
+      <div class="n">was exactly 1.00 of 24 cores</div>
+    </div>
+    <div class="fig">
+      <div class="k">Tests</div>
+      <div class="v">199</div>
+      <div class="n">up from 156, all passing</div>
+    </div>
+    <div class="fig">
+      <div class="k">Bugs found &amp; fixed</div>
+      <div class="v">7</div>
+      <div class="n">six of them silent</div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="sechead"><span class="idx">FIRST</span><h2>Why nothing opened</h2></div>
+  <div class="col">
+    <p><strong>The browser UI had been deleted.</strong> <code>AutoDeck_v0.4.2/</code> — the actual
+    application — was in the Recycle Bin, while every launcher in the bundle still pointed at it.
+    That is why pressing anything did nothing. I recovered it intact.</p>
+    <p>Alongside it: 190 macOS <code>._*</code> junk files, three dead hardcoded paths from the
+    original author's Mac (<code>/Users/joshuamorell/…</code>), and five competing launchers across
+    four folders. Everything now lives at <code>C:\Users\marcu\AutoDeck</code> — outside OneDrive,
+    as your own README advised — behind one <strong>AutoDeck</strong> shortcut on your Desktop and
+    Start Menu.</p>
+    <p>There was no Python on the machine either, so the button could never have worked. Python
+    3.12.10 is installed and the first-run setup is done.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="idx">ASK 1</span><h2>Use more of the computer</h2></div>
+  <div class="col">
+    <p class="quote">"I checked task manager while it was running and i had no cpu usage… lets shoot for 50%"</p>
+    <p>Confirmed and measured: the pipeline sat at <strong>4.2% of 24 cores — exactly 1.00 core</strong>.
+    There was no parallelism anywhere in the codebase.</p>
+    <p>The instinct is to add threads. Measurement said otherwise. libigl — which dominates the
+    slowest stage — <strong>holds the GIL</strong> (parallel efficiency 0.15 on 6 threads), so threads
+    do nothing for it. The real lever turned out to be <strong>vectorisation</strong>.</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Stage (807 MB Key West scan)</th><th>Before</th><th>After</th><th>Change</th><th class="barcell">&nbsp;</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>geometry_fields</td><td class="num">223.6 s</td><td class="num">8.4 s</td><td class="gain">26.5&times;</td><td class="barcell"><span class="bar" style="width:100%"></span></td></tr>
+        <tr><td>load_obj</td><td class="num">142.5 s</td><td class="num">49.6 s</td><td class="gain">2.9&times;</td><td class="barcell"><span class="bar" style="width:43%"></span></td></tr>
+        <tr><td>boundary_field</td><td class="num">23.4 s</td><td class="num">14.0 s</td><td class="gain">1.7&times;</td><td class="barcell"><span class="bar" style="width:4%"></span></td></tr>
+        <tr><td>mapping</td><td class="num">69.5 s</td><td class="num">56.3 s</td><td class="gain">1.2&times;</td><td class="barcell"><span class="bar" style="width:6%"></span></td></tr>
+        <tr><td>development</td><td class="num">171.7 s</td><td class="num">153.2 s</td><td class="gain">1.1&times;</td><td class="barcell"><span class="bar" style="width:8%"></span></td></tr>
+        <tr><td>preprocess</td><td class="num">51.5 s</td><td class="num">42.0 s</td><td class="gain">1.2&times;</td><td class="barcell"><span class="bar" style="width:4%"></span></td></tr>
+        <tr><td>topview</td><td class="num">64.1 s</td><td class="num">55.7 s</td><td class="gain">1.2&times;</td><td class="barcell"><span class="bar" style="width:4%"></span></td></tr>
+        <tr><td>orientation</td><td class="num">11.1 s</td><td class="num">5.5 s</td><td class="gain">2.0&times;</td><td class="barcell"><span class="bar" style="width:2%"></span></td></tr>
+        <tr><td>conditioning</td><td class="num">21.3 s</td><td class="num">16.7 s</td><td class="gain">1.3&times;</td><td class="barcell"><span class="bar" style="width:2%"></span></td></tr>
+        <tr class="total"><td>Total</td><td class="num">781.7 s</td><td class="num">405.1 s</td><td class="gain">1.93&times;</td><td class="barcell"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>The single biggest win: <code>estimate_principal_curvatures</code> ran a separate
+    least-squares solve for <em>every one of 2 million faces</em> in a Python loop. A triangle has at
+    most three neighbours, so each solve is tiny and fixed-size — they all now accumulate into one
+    batched solve. <strong>14.6 s → 0.65 s</strong> on a test mesh, agreeing with the old path to
+    1.6&times;10<sup>-9</sup> relative.</p>
+    <p>Panels also develop in parallel worker processes now — but only when it pays. On your Key West
+    scan the surface raster is 276 MB and Windows copies it to every worker; measured, five workers
+    made that stage <em>slower</em>, because one panel dominates the work anyway. It falls back to
+    in-process above a configurable budget and says so in the log. On the smaller test boat, where
+    the raster is small and two panels are comparable, the fan-out gives 1.7&times; on that stage.</p>
+    <p>Set it under <code>parallel</code> in <code>engine/config/default.yaml</code>, or per run with
+    <code>AUTODECK_WORKERS</code>. The worker count provably does not change the cache key or the
+    geometry: a parallel run and a serial run produced <strong>byte-identical DXF output — 166
+    entities, maximum coordinate difference exactly 0 mm</strong>.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="idx">ASK 2</span><h2>Texture</h2></div>
+  <div class="col">
+    <p class="quote">"open the whole obj folder with the texture files as well… use the texture to help with outline drawing detection"</p>
+  </div>
+
+  <div class="feat">
+    <h3>Opening a folder, and seeing it</h3>
+    <p><strong>Open a scan folder…</strong> takes the whole export — <code>.obj</code>,
+    <code>.mtl</code> and the images — and the deck renders with its real photographic surface under a
+    new <em>Texture (scan photo)</em> shading mode, on by default when a scan has one. Atlases are
+    downscaled to 4096 px before being sent to the browser; a 16384&sup2; atlas is 268 megapixels,
+    which trips Pillow's decompression guard and exceeds the texture limit on many integrated GPUs.</p>
+  </div>
+
+  <div class="feat">
+    <h3>Using it to find the deck edge</h3>
+    <p>The colour change between deck and gelcoat is added to the boundary evidence, with two
+    deliberate constraints that keep it from making a good geometric result worse.</p>
+    <p><strong>Chromaticity, not brightness.</strong> Shadows and exposure drift multiply a pixel by a
+    scalar, and chromaticity is invariant to that — so a baked shadow across the deck is nearly
+    invisible to this measure while teak against gelcoat is not.</p>
+    <p><strong>Region colour, not neighbour colour.</strong> This one was found by testing: a plain
+    edge-to-edge colour gradient fired on <strong>11% of flat deck interior</strong> — those are the
+    teak caulk lines, 63.5 mm apart and near-black against the plank. It would have added cost right
+    across the deck and fragmented it. Averaging over a 90 mm region first erases the pattern and
+    keeps the material step: <strong>false fires 11.0% → 0.3%</strong>, and separation between the
+    wall line and flat deck went from 2&times; to <strong>56&times;</strong>.</p>
+    <p>Colour is <strong>additive only</strong> — excluded from the decisive-evidence test — so it can
+    reinforce a boundary the geometry already suspects but can never declare one alone. A stain
+    cannot invent a wall line. On the test boat the resulting outline came out
+    <strong>byte-identical</strong> to the geometry-only run.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="idx">ASK 3</span><h2>Seams and sheet nesting</h2></div>
+
+  <dl class="spec">
+    <dt>Sheet</dt><dd>40 &times; 80 in &mdash; 1016 &times; 2032 mm</dd>
+    <dt>Largest part</dt><dd>39 &times; 79 in &mdash; 990.6 &times; 2006.6 mm (12.7 mm margin all round)</dd>
+    <dt>Seam gap</dt><dd>6.0 mm between pieces that meet at a seam</dd>
+    <dt>Piece gap</dt><dd>20.0 mm minimum on the sheet, adjustable in the page</dd>
+    <dt>Rotation</dt><dd>0&deg; or 180&deg; only &mdash; never 90&deg;, never mirrored</dd>
+  </dl>
+
+  <div class="col">
+    <p>Draw a seam by dragging a line on the <em>Flat layout &amp; seams</em> tab; drag either end to
+    move it, and the sheets re-plan on every edit. The <em>Sheet layout</em> tab shows the nested
+    result, and <strong>Export sheet DXFs</strong> writes one <code>sheet_NN.dxf</code> per sheet.</p>
+    <p>Because TruGrain is directional, the whole job is rotated so the boat's long axis runs along
+    the 2032 mm sheet dimension, after which nesting is ordinary bottom-left packing. 180&deg; is
+    free — it keeps the grain and lets an L-shaped piece tuck into its neighbour's notch, which is
+    where the material saving comes from.</p>
+    <p>The seam gap is produced by subtracting a 3 mm kerf either side of the line, which gives the
+    asymmetry the job needs for nothing: the fitted outer boundary is untouched and only the new
+    seam edges are inset. <strong>Arcs survive the cut</strong> — 22 of 23 preserved on the real
+    fitted panel, worst rebuild error 0.0094 mm — rather than degrading to dense polylines.</p>
+  </div>
+
+  <div class="note">
+    <p class="eyebrow">Check before cutting</p>
+    <p>The boat axis is detected with a confidence, and on the test run that confidence was
+    <strong>0.21</strong>. When it is low the page says so and you can type the grain angle in by
+    hand. If you do, and it disagrees with the pattern already baked into the fitted DXF by more
+    than 3&deg;, you get a second warning — the planks and the grain would not line up.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="idx">FOUND</span><h2>Bugs in the existing cut geometry</h2></div>
+  <div class="col">
+    <p>These were all in code that reported success. They are the findings I would most want you to
+    see.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag t-bad">Silent · scale</span>
+    <h3>A failed geodesic quietly rescaled the panel</h3>
+    <p>When <code>igl.exact_geodesic</code> raised, the code silently fell back to a shortest path
+    along mesh edges. That distance <em>is</em> the developed panel's scale, and ARAP does not absorb
+    it — I measured the fallback at <strong>+7.36%, or +394 mm on a 5.4 m panel</strong>, with no
+    warning anywhere. The panel is now rejected instead of mis-scaled.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag t-bad">Silent · material</span>
+    <h3>Seam splitting lost a quarter of a square metre</h3>
+    <p>Arc provenance was attached to ring <em>vertices</em>. A straight kerf cut arrives with only
+    two vertices and both sit on the original boundary, so the seam edge was never recognised and the
+    piece closed with a diagonal across the cut. Kerf removed went from
+    <strong>254,868 mm&sup2; to 21,399 mm&sup2;</strong> once fixed, piece area from 2.3780 m&sup2;
+    back to 2.6115 m&sup2;, and preserved arcs from 16 to 22. An independent review measured the same
+    defect as <strong>10.5% of the material missing from the DXF</strong> while the report said OK.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag t-warn">Silent · wrong panel</span>
+    <h3>A seam cut panels you never drew across</h3>
+    <p>Seams are extended before cutting so a roughly drawn line severs the panel cleanly — but the
+    extension reached a full bounding-box diagonal <em>in both directions</em>, so a seam drawn over
+    one panel sliced another panel metres away. Global seams now apply only where the line you
+    actually drew crosses.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag t-warn">Misleading picture</span>
+    <h3>The sheet preview drew the wrong frame</h3>
+    <p>The preview resolved the boat axis separately from the exporter and ignored the manual grain
+    override, so the pieces were <em>placed</em> in one frame and <em>drawn</em> in another. With a
+    45&deg; override every piece fell outside the sheet — and that bites exactly when detection is
+    unsure and you have been told to override.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag t-warn">Wasted material</span>
+    <h3>Spacing reserved far more than you asked</h3>
+    <p>The clearance buffer used mitre joins, which at a sharp corner run well past the nominal
+    offset — 80.6 mm beyond a round buffer at a 20 mm setting. Pieces were pushed apart and could
+    spill onto an extra sheet.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag t-good">Also fixed</span>
+    <h3>Two smaller ones</h3>
+    <p>Exported piece outlines were wound clockwise while the rest of the codebase enforces
+    counter-clockwise outer rings; and the sheet DXFs could never appear in the Files panel, because
+    the preview path never reported the files it had written.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="idx">LIMITS</span><h2>What is not proven</h2></div>
+  <div class="col">
+    <p>Stated plainly, because none of this has cut material yet.</p>
+    <ul>
+      <li><strong>Texture detection is unvalidated on a real scan.</strong> Your Key West OBJ has no
+      <code>.mtl</code> and no texture, so every threshold is calibrated on the synthetic boat I
+      generated. It degrades to geometry-only when there is no texture, which is what happens on your
+      real scan today.</li>
+      <li><strong>The nester is a first-fit heuristic</strong>, not an optimiser. It respects every
+      constraint and is deterministic, but it will not always find the tightest packing.</li>
+      <li><strong>Development and mapping are still the slow stages</strong>, at 153 s and 56 s of the
+      405 s. An independent survey found the mapping cost is one AABB tree rebuilt per curve — 84
+      rebuilds of the same tree — which should batch down to a couple of seconds. I did not do it;
+      it is the obvious next win.</li>
+      <li><strong>Manufacturing approval remains TEST_ONLY</strong> until a human has physically
+      verified a cut. Nothing here changes that.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="idx">RUN IT</span><h2>Opening it</h2></div>
+  <div class="col">
+    <p>Double-click <strong>AutoDeck</strong> on your Desktop. A console shows progress and the
+    browser opens at <code>http://127.0.0.1:8765/</code> — leave the console open, closing it stops
+    the app.</p>
+    <p>Everything is found relative to <code>C:\Users\marcu\AutoDeck</code>, so the folder can be
+    moved or copied anywhere. The old <code>OneDrive\Documents\AutoDeck_Portable</code> is untouched
+    and can be deleted once you have confirmed the new one works.</p>
+    <p>The work sits in ten git commits on top of a clean baseline, with the measurements written
+    into each message, so any single change can be read or reverted on its own.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="col">
+    <p>Measured on this machine: Intel Core Ultra 9 275HX, 24 logical CPUs, 63 GB RAM,
+    Python 3.12.10. Timings are cold runs with the engine cache cleared.</p>
+  </div>
+</footer>
+
+</div>
