@@ -121,7 +121,7 @@ _register("conditioning.useful_raw_curves", _conditioning.useful_raw_curves, ["p
 _register("conditioning.condition_curves", _conditioning.condition_curves, ["curves", "surface", "mm_per_input_unit", "config"])
 _register("development.develop_patch", _development.develop_patch, ["surface", "patch_id", "config"])
 _register("development.build_development_mesh", _development.build_development_mesh, ["surface", "patch_id", "config"])
-_register("development.map_curve_to_development", _development.map_curve_to_development, ["points_mm", "result", "maximum_distance_mm"])
+_register("development.map_curve_to_development", _development.map_curve_to_development, ["points_mm", "result", "maximum_distance_mm", "tree"])
 _register("development.save_development_artifact", _development.save_development_artifact, ["path", "result"])
 _register("patterns.detect_boat_frame", _patterns.detect_boat_frame, ["primary", "settings"])
 _register("patterns._teak", _patterns._teak, ["domain", "frame", "patch_id", "settings"])
@@ -266,8 +266,16 @@ def develop_patch_rigid_planar(surface: AcceptedSurfaceGrid, patch_id: int, conf
     return _development.RigidPlanarDevelopment().develop(mesh, config)
 
 
-def map_curve_to_development(points_mm: np.ndarray, result: DevelopmentResult, maximum_distance_mm: float) -> CurveDevelopmentMap:
-    return _development.map_curve_to_development(np.asarray(points_mm, dtype=np.float64), result, maximum_distance_mm)
+def map_curve_to_development(points_mm: np.ndarray, result: DevelopmentResult, maximum_distance_mm: float,
+                             tree: Any = None) -> CurveDevelopmentMap:
+    return _development.map_curve_to_development(
+        np.asarray(points_mm, dtype=np.float64), result, maximum_distance_mm, tree)
+
+
+def build_surface_tree(result: DevelopmentResult) -> Any:
+    """One reusable AABB per panel; see development.build_surface_tree."""
+
+    return _development.build_surface_tree(result)
 
 
 def save_development_artifact(path: Path, result: DevelopmentResult) -> None:

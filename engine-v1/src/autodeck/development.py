@@ -505,17 +505,47 @@ def _barycentric(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     return np.column_stack((1.0 - v - w, v, w))
 
 
+def build_surface_tree(result: DevelopmentResult):
+    """A reusable AABB tree over one panel's development mesh, or None.
+
+    `igl.point_mesh_squared_distance` rebuilds its acceleration structure on
+    every call, and the build is essentially the whole cost: on a 385k-face
+    panel, 100 query points and 100,000 query points both take ~0.81 s.  A run
+    maps ~84 curves onto the same panels, so that was ~84 rebuilds of the same
+    tree.  Building it once and reusing it is 52x faster on that workload and
+    returns bit-identical distances, triangle ids and closest points.
+    """
+
+    if result.status == "INVALID" or not len(result.uv_mm):
+        return None
+    try:
+        import igl  # type: ignore
+
+        tree = igl.AABB()
+        tree.init(result.mesh.base_vertices_mm, result.mesh.faces)
+        return tree
+    except (ImportError, AttributeError, RuntimeError):
+        return None                 # older libigl: fall back to per-call queries
+
+
 def map_curve_to_development(
     points_mm: np.ndarray,
     result: DevelopmentResult,
     maximum_distance_mm: float,
+    tree: object | None = None,
 ) -> CurveDevelopmentMap:
     if result.status == "INVALID" or not len(result.uv_mm):
         return CurveDevelopmentMap(np.empty(0, dtype=np.int64), np.empty((0, 3)), np.empty(0), np.empty((0, 3)), "INVALID")
     import igl  # type: ignore
-    squared, triangle_ids, closest = igl.point_mesh_squared_distance(
-        np.asarray(points_mm, dtype=np.float64), result.mesh.base_vertices_mm, result.mesh.faces
-    )
+    query = np.asarray(points_mm, dtype=np.float64)
+    if tree is not None:
+        squared, triangle_ids, closest = tree.squared_distance(
+            result.mesh.base_vertices_mm, result.mesh.faces, query
+        )
+    else:
+        squared, triangle_ids, closest = igl.point_mesh_squared_distance(
+            query, result.mesh.base_vertices_mm, result.mesh.faces
+        )
     triangles = result.mesh.base_vertices_mm[result.mesh.faces[triangle_ids]]
     barycentric = _barycentric(closest, triangles)
     flat_xy = np.einsum("ni,nij->nj", barycentric, result.uv_mm[result.mesh.faces[triangle_ids]])

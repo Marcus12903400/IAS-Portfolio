@@ -402,8 +402,15 @@ def _compute(
     assignment_notes: list[dict[str, Any]] = []
     counter = 0
 
+    # One AABB per panel, reused by every curve mapped onto it. Rebuilding it
+    # per curve was ~84 rebuilds of the same tree and dominated this stage.
+    surface_trees: dict[int, Any] = {
+        pid: v1compat.build_surface_tree(panel.development) for pid, panel in panels.items()
+    }
+
     def _map(points_mm: np.ndarray, pid: int) -> tuple[np.ndarray, str, float, float]:
-        mapping = v1compat.map_curve_to_development(points_mm, panels[pid].development, max_distance)
+        mapping = v1compat.map_curve_to_development(
+            points_mm, panels[pid].development, max_distance, surface_trees.get(pid))
         d = mapping.distances_mm
         return (mapping.flat_points_mm[:, :2].copy(), mapping.status,
                 float(np.max(d)) if len(d) else 0.0, float(np.percentile(d, 95)) if len(d) else 0.0)
