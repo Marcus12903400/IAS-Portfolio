@@ -19,7 +19,11 @@
       <div id="dropzone">
         Drop an <b>.obj</b> scan here<br>or <label class="link">choose a file<input type="file" id="file-input" accept=".obj"></label>
       </div>
-      <button id="btn-pick" class="secondary">Browse on this computer…</button>
+      <div class="row">
+        <button id="btn-pick" class="secondary">Browse for an .obj…</button>
+        <button id="btn-pick-folder" class="secondary">Open a scan folder…</button>
+      </div>
+      <div class="hint">A scan folder brings the .mtl and texture images with it, so the deck shows with its real surface.</div>
       <div id="scan-info" class="info muted">No scan loaded</div>
     </section>
 
@@ -57,7 +61,23 @@
     </section>
 
     <section>
-      <h2>4 · Files</h2>
+      <h2>4 · Seams &amp; sheets</h2>
+      <div class="row">
+        <label>Piece gap <input type="number" id="opt-spacing" min="0" max="200" step="1" value="20" style="width:60px"> mm</label>
+        <label>Seam gap <input type="number" id="opt-seamgap" min="0" max="50" step="0.5" value="6" style="width:56px"> mm</label>
+      </div>
+      <div class="row">
+        <label>Grain angle <input type="number" id="opt-grain" step="0.5" placeholder="auto" style="width:64px"> °</label>
+        <label class="check"><input type="checkbox" id="opt-rot180" checked> allow 180°</label>
+      </div>
+      <div class="hint" id="grain-hint">The 80″ sheet dimension runs along the boat. Blank uses the detected boat axis.</div>
+      <div id="seam-list" class="info muted">No seams yet</div>
+      <button id="btn-sheets" disabled>Export sheet DXFs</button>
+      <div class="hint">Seams split each panel with a 6 mm gap; pieces are nested on 40×80″ sheets, rotated 0° or 180° only so the grain stays along the boat.</div>
+    </section>
+
+    <section>
+      <h2>5 · Files</h2>
       <div id="files" class="info muted">Open or make a run first</div>
     </section>
 
@@ -70,15 +90,31 @@
   <main id="center">
     <div id="tabs">
       <button data-tab="3d" class="active">3D over the mesh</button>
-      <button data-tab="flat">Flat layout</button>
+      <button data-tab="flat">Flat layout &amp; seams</button>
+      <button data-tab="sheets">Sheet layout</button>
     </div>
     <div id="view3d">
       <canvas id="gl"></canvas>
       <div id="view3d-empty" class="empty">Load a scan to see it here</div>
     </div>
     <div id="viewflat" hidden>
-      <svg id="flat" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div id="flat-empty" class="empty">Run the outline to see the flat panels</div>
+      <div class="viewtools">
+        <button id="btn-seam" class="secondary">✎ Draw a seam</button>
+        <span class="hint inline" id="seam-hint">Drag a line where a join should go. Drag an end to move it.</span>
+      </div>
+      <div class="viewbody">
+        <svg id="flat" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="flat-empty" class="empty">Run the outline to see the flat panels</div>
+      </div>
+    </div>
+    <div id="viewsheets" hidden>
+      <div class="viewtools">
+        <span id="sheets-head" class="hint inline">Run auto-fit first — sheets are cut from the fitted outline.</span>
+      </div>
+      <div class="viewbody">
+        <svg id="sheets" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="sheets-empty" class="empty">Run auto-fit to lay pieces out on sheets</div>
+      </div>
     </div>
   </main>
 
@@ -87,6 +123,7 @@
       <h2>Layers</h2>
       <div id="layers" class="muted">No run open</div>
       <label class="check">Shading <select id="opt-shading">
+        <option value="texture">Texture (scan photo)</option>
         <option value="smooth">Smooth</option>
         <option value="flat">Flat (facets)</option>
         <option value="slope">Slope — walls dark</option>

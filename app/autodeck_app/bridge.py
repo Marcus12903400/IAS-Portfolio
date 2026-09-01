@@ -134,6 +134,66 @@ def job_ingest(run_dir: Path, drawing: Path, log: Log) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# sheets: seams, nesting, per-sheet DXF
+
+
+def _sheet_modules():
+    settings.ensure_engine_on_path()
+    from autodeck2 import config as config_mod, sheetjob, sheets
+    return config_mod, sheetjob, sheets
+
+
+def _sheet_config(overrides: dict[str, Any]) -> dict[str, Any]:
+    config_mod, _sheetjob, _sheets = _sheet_modules()
+    config = config_mod.load_config()
+    if overrides:
+        config = {**config, "sheets": {**(config.get("sheets") or {}), **overrides}}
+    return config
+
+
+def sheet_preview(run_dir: Path, overrides: dict[str, Any],
+                  seams: list[dict[str, Any]] | None = None, save: bool = False) -> dict[str, Any]:
+    """Seams plus the nested sheet layout as drawable rings; writes no DXFs."""
+
+    _config_mod, sheetjob, sheets_mod = _sheet_modules()
+    config = _sheet_config(overrides)
+    if seams is not None:
+        parsed = [sheets_mod.Seam.from_dict({**s, "seam_id": s.get("seam_id") or f"s{i + 1}"})
+                  for i, s in enumerate(seams)]
+        if save:
+            sheets_mod.write_seams(run_dir, parsed)
+    else:
+        parsed = sheets_mod.read_seams(run_dir)
+
+    resolved = sheets_mod.settings(config)
+    if sheetjob.source_dxf(run_dir) is None:
+        return {"available": False,
+                "reason": "run auto-fit (or ingest a drawing) first -- sheets are cut from the fitted outline",
+                "seams": [s.to_dict() for s in parsed], "settings": resolved}
+    result = sheetjob.preview(run_dir, config, seams=parsed)
+    result["available"] = True
+    result["seams"] = [s.to_dict() for s in parsed]
+    result["settings"] = resolved
+    return result
+
+
+def job_sheets(run_dir: Path, overrides: dict[str, Any], log: Log) -> dict[str, Any]:
+    _config_mod, sheetjob, _sheets = _sheet_modules()
+    result = sheetjob.plan(run_dir, _sheet_config(overrides), progress=log)
+    for warning in result.get("warnings", []):
+        log(f"warning: {warning}")
+    for entry in result.get("files", []):
+        log(f"{entry['name']}: {len(entry['pieces'])} piece(s), "
+            f"{entry['utilisation'] * 100:.0f}% used, closed polylines={entry['all_closed']}")
+    log(f"Sheets: {result['summary']['sheet_count']} for {result['piece_count']} piece(s) "
+        f"-- status {result['status']}")
+    return {"status": result["status"], "sheet_count": result["summary"]["sheet_count"],
+            "piece_count": result["piece_count"],
+            "files": [entry["name"] for entry in result.get("files", [])],
+            "oversize": result.get("oversize", [])}
+
+
+# ---------------------------------------------------------------------------
 # a loaded run and its overlays
 
 @dataclass

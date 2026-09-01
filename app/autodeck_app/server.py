@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import threading
@@ -16,12 +17,36 @@ from .jobs import JobManager
 
 STATIC = Path(__file__).parent / "static"
 SAFE_FILES = {"outline.3dm", "outline.dxf", "auto_cam.3dm", "final_auto.dxf", "final.dxf", "outline_report.md",
-              "autofit_report.md", "final_report.md", "calibration_report.md", "run.json", "autofit.json", "panels.json"}
+              "autofit_report.md", "final_report.md", "calibration_report.md", "run.json", "autofit.json", "panels.json",
+              "sheets.json", "sheet_report.md", "seams.json"}
+_SHEET_DXF = re.compile(r"^sheet_\d{2,3}\.dxf$")
 _PICKER = (
     "import tkinter as tk, tkinter.filedialog as fd\n"
     "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)\n"
     "print(fd.askopenfilename(title='Choose a 3D scan (OBJ)', filetypes=[('OBJ mesh', '*.obj'), ('All files', '*')]))\n"
 )
+_FOLDER_PICKER = (
+    "import tkinter as tk, tkinter.filedialog as fd\n"
+    "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)\n"
+    "print(fd.askdirectory(title='Choose a scan folder (OBJ + MTL + textures)'))\n"
+)
+
+
+def resolve_scan_folder(folder: Path) -> Path:
+    """The OBJ to load from a scan folder.
+
+    A photogrammetry export is a folder -- mesh, .mtl and one or more texture
+    images -- so the whole folder is the natural unit to open.  Picks the
+    largest .obj, which is the mesh rather than any stray decimated proxy, and
+    searches one level down for the common `<name>/<name>.obj` layout.
+    """
+
+    candidates = sorted(folder.glob("*.obj"))
+    if not candidates:
+        candidates = sorted(folder.glob("*/*.obj"))
+    if not candidates:
+        abort(400, f"no .obj file in {folder}")
+    return max(candidates, key=lambda p: p.stat().st_size)
 
 
 def create_app() -> Flask:
@@ -130,6 +155,8 @@ def create_app() -> Flask:
         busy_guard()
         data = request.get_json(silent=True) or {}
         path = Path(str(data.get("path", ""))).expanduser()
+        if path.is_dir():
+            path = resolve_scan_folder(path)
         if not path.is_file():
             abort(400, f"not a file: {path}")
         scan, job = register_scan(path)
@@ -138,8 +165,10 @@ def create_app() -> Flask:
     @app.post("/api/scan/pick")
     def api_scan_pick():
         busy_guard()
+        folder = (request.get_json(silent=True) or {}).get("folder")
+        script = _FOLDER_PICKER if folder else _PICKER
         try:
-            proc = subprocess.run([sys.executable, "-c", _PICKER], capture_output=True, text=True, timeout=900)
+            proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=900)
         except (OSError, subprocess.TimeoutExpired) as exc:
             abort(500, f"file picker unavailable ({exc}); drop the file onto the page instead")
         chosen = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
@@ -148,6 +177,8 @@ def create_app() -> Flask:
                 abort(500, "file picker unavailable on this Python (no Tk); drop the file onto the page instead")
             return jsonify({"cancelled": True})
         path = Path(chosen)
+        if path.is_dir():
+            path = resolve_scan_folder(path)
         if not path.is_file():
             abort(400, f"not a file: {path}")
         scan, job = register_scan(path)
@@ -162,6 +193,18 @@ def create_app() -> Flask:
         if data is None:
             abort(404, "preview not ready")
         return Response(data, mimetype="application/octet-stream", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/scan/texture")
+    def api_scan_texture():
+        """The scan's own diffuse texture, already downscaled for the browser."""
+
+        scan = state["scan"]
+        if scan is None or not scan.get("sha256"):
+            abort(404, "no scan loaded")
+        path = meshview.texture_path(scan["sha256"])
+        if not path.is_file():
+            abort(404, "this scan has no texture")
+        return send_file(str(path), mimetype="image/jpeg")
 
     # ------------------------------------------------------------------ jobs
     @app.get("/api/jobs/<job_id>")
@@ -257,6 +300,60 @@ def create_app() -> Flask:
         job = jobs.start("ingest", fn, {"run_id": run_dir.name, "drawing": drawing.name})
         return jsonify({"job_id": job.job_id})
 
+    # ------------------------------------------------------------------ sheets
+    def sheet_options(data: dict[str, Any]) -> dict[str, Any]:
+        """Per-request overrides for the sheet settings the page exposes."""
+
+        overrides: dict[str, Any] = {}
+        for key, cast in (("part_spacing_mm", float), ("seam_gap_mm", float),
+                          ("grain_angle_deg", float), ("nest_step_mm", float)):
+            if data.get(key) not in (None, ""):
+                try:
+                    overrides[key] = cast(data[key])
+                except (TypeError, ValueError):
+                    abort(400, f"{key} must be a number")
+        if data.get("allow_180_rotation") is not None:
+            overrides["allow_180_rotation"] = bool(data["allow_180_rotation"])
+        return overrides
+
+    @app.get("/api/sheets")
+    def api_sheets():
+        """The current seams and, if geometry exists, the nested sheet layout."""
+
+        run_dir = current_run_dir()
+        result = bridge.sheet_preview(run_dir, {})
+        return jsonify(result)
+
+    @app.post("/api/sheets/seams")
+    def api_sheets_seams():
+        """Replace the seam set and re-plan. Cheap enough to call on every edit."""
+
+        run_dir = current_run_dir()
+        data = request.get_json(silent=True) or {}
+        seams = data.get("seams")
+        if not isinstance(seams, list):
+            abort(400, "seams must be a list")
+        try:
+            result = bridge.sheet_preview(run_dir, sheet_options(data), seams=seams, save=True)
+        except (ValueError, KeyError, TypeError) as exc:
+            abort(400, f"bad seam data: {exc}")
+        return jsonify(result)
+
+    @app.post("/api/sheets/export")
+    def api_sheets_export():
+        """Write one DXF per sheet."""
+
+        busy_guard()
+        run_dir = current_run_dir()
+        data = request.get_json(silent=True) or {}
+        options = sheet_options(data)
+
+        def fn(log):
+            return bridge.job_sheets(run_dir, options, log)
+
+        job = jobs.start("sheets", fn, {"run_id": run_dir.name})
+        return jsonify({"job_id": job.job_id})
+
     @app.get("/api/overlays")
     def api_overlays():
         overlays = state["overlays"]
@@ -267,7 +364,9 @@ def create_app() -> Flask:
     @app.get("/api/file/<run_id>/<name>")
     def api_file(run_id: str, name: str):
         run_dir = settings.RUNS_DIR / run_id
-        if name not in SAFE_FILES and not (name.startswith("autofit_panel") and name.endswith(".png")):
+        if (name not in SAFE_FILES
+                and not (name.startswith("autofit_panel") and name.endswith(".png"))
+                and not _SHEET_DXF.match(name)):
             abort(404)
         path = run_dir / name
         if not path.is_file() or ".." in run_id:

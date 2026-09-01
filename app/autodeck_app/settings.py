@@ -17,6 +17,10 @@ RUNS_DIR = Path(os.environ.get("AUTODECK_RUNS_DIR", AUTODECK2_ROOT / "outputs" /
 HOST = os.environ.get("AUTODECK_HOST", "127.0.0.1")
 PORT = int(os.environ.get("AUTODECK_PORT", "8765"))
 PREVIEW_TARGET_FACES = int(os.environ.get("AUTODECK_PREVIEW_FACES", "250000"))
+# Largest edge, in pixels, of the texture served to the browser.  Scan atlases
+# are routinely 8192 or 16384 square, and 16384 exceeds WebGL MAX_TEXTURE_SIZE
+# on many integrated GPUs, so the raw file is never sent as-is.
+PREVIEW_TEXTURE_MAX = int(os.environ.get("AUTODECK_PREVIEW_TEXTURE_MAX", "4096"))
 
 
 def ensure_engine_on_path() -> None:

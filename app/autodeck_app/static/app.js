@@ -14,7 +14,11 @@
   };
 
   // ------------------------------------------------------------ state
-  const state = { scan: null, runId: null, overlays: null, meshLoadedFor: null, job: null, jobSince: 0, layers: {}, xray: false, shading: "smooth" };
+  const state = {
+    scan: null, runId: null, overlays: null, meshLoadedFor: null, job: null, jobSince: 0,
+    layers: {}, xray: false, shading: "smooth", shadingChosen: false, hasTexture: false,
+    tab: "3d", seams: [], sheets: null, seamMode: false, seamDrag: null,
+  };
 
   function setStatus(text, cls) { const el = $("status-bar"); el.textContent = text; el.className = "status " + (cls || ""); }
   function log(line, isError) {
@@ -24,7 +28,7 @@
   }
 
   // ------------------------------------------------------------ three.js
-  let renderer, scene, camera, controls, meshObject = null, overlayGroup, meshMaterial, sun;
+  let renderer, scene, camera, controls, meshObject = null, overlayGroup, meshMaterial, sun, meshTexture = null;
   const bounds = { min: null, max: null };
 
   function init3D() {
@@ -72,9 +76,19 @@
   }
 
   function applyShading(mode) {
+    if (mode === "texture" && !state.hasTexture) mode = "smooth";
     state.shading = mode;
+    $("opt-shading").value = mode;
     if (!meshObject) return;
     const g = meshObject.geometry;
+    meshMaterial.map = mode === "texture" ? meshTexture : null;
+    if (mode === "texture") {
+      meshMaterial.vertexColors = false;
+      meshMaterial.color.set(0xffffff);       // white base so the map shows unaltered
+      meshMaterial.flatShading = false;
+      meshMaterial.needsUpdate = true;
+      return;
+    }
     if (mode === "smooth" || mode === "flat") {
       meshMaterial.vertexColors = false;
       meshMaterial.color.set(0xd8d8dc);
@@ -140,24 +154,66 @@
     const head = new Uint32Array(buf, 0, 4);
     if (head[0] !== 0x4D455348) { log("bad mesh stream", true); return; }
     const nv = head[1], nf = head[2];
+    // Header word 3 was reserved and always zero; bit 0 now says a UV block
+    // follows the indices. A preview cached before v5 leaves it clear.
+    const hasUV = (head[3] & 1) === 1;
     const positions = new Float32Array(buf, 16, nv * 3);
     const indices = new Uint32Array(buf, 16 + nv * 12, nf * 3);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    if (hasUV) {
+      const uvs = new Float32Array(buf, 16 + nv * 12 + nf * 12, nv * 2);
+      geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    }
     geometry.computeVertexNormals();
     if (meshObject) { scene.remove(meshObject); meshObject.geometry.dispose(); }
     meshObject = new THREE.Mesh(geometry, meshMaterial);
     const mm = (state.overlays && state.overlays.mm_per_unit) || unitScale(scan.units_detected);
     meshObject.scale.set(mm, mm, mm);
     scene.add(meshObject);
-    applyShading(state.shading);
+    state.hasTexture = hasUV && !!(scan.preview && scan.preview.texture);
+    await loadTexture();
+    applyShading(state.hasTexture && !state.shadingChosen ? "texture" : state.shading);
     state.meshLoadedFor = scan.sha256;
     $("view3d-empty").hidden = true;
     bounds.min = null; bounds.max = null;
     const bb = scan.preview; extendBounds([bb.bbox_min, bb.bbox_max], mm);
     fitView();
-    log(`Mesh preview: ${nf.toLocaleString()} faces (of ${bb.face_count.toLocaleString()}), scale ${mm} mm/unit`);
+    log(`Mesh preview: ${nf.toLocaleString()} faces (of ${bb.face_count.toLocaleString()}), scale ${mm} mm/unit`
+        + (state.hasTexture ? " · textured" : ""));
+  }
+
+  // Load the scan's own diffuse texture. Kept off the renderer's global
+  // outputEncoding on purpose: changing that would shift every existing
+  // shading mode the user has already tuned their light sliders against.
+  function loadTexture() {
+    return new Promise((resolve) => {
+      const select = $("opt-shading");
+      const option = select.querySelector('option[value="texture"]');
+      if (!state.hasTexture) {
+        if (option) { option.disabled = true; option.textContent = "Texture (none in this scan)"; }
+        if (meshTexture) { meshTexture.dispose(); meshTexture = null; }
+        meshMaterial.map = null; meshMaterial.needsUpdate = true;
+        resolve();
+        return;
+      }
+      if (option) { option.disabled = false; option.textContent = "Texture (scan photo)"; }
+      new THREE.TextureLoader().load(
+        "/api/scan/texture?v=" + encodeURIComponent(state.scan.sha256),
+        (texture) => {
+          if (meshTexture) meshTexture.dispose();
+          meshTexture = texture;
+          // OBJ V runs bottom-up and three.js flips by default, which is the
+          // pairing OBJLoader relies on -- so leave flipY alone.
+          texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          texture.needsUpdate = true;
+          resolve();
+        },
+        undefined,
+        () => { state.hasTexture = false; log("could not load the scan texture", true); resolve(); },
+      );
+    });
   }
 
   function unitScale(u) { return ({ mm: 1, cm: 10, m: 1000, in: 25.4 })[u] || 1; }
@@ -255,14 +311,246 @@
       t.textContent = `Panel ${panel.id} (${panel.role})`;
       g.appendChild(t);
     }
+    drawSeams(g);
+    svg.appendChild(g);
+  }
+
+  // ------------------------------------------------------------ seams
+  const NS = "http://www.w3.org/2000/svg";
+
+  // The flat view draws model y negated, so screen->model flips it back.
+  function svgPoint(svg, event) {
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX; pt.y = event.clientY;
+    const m = svg.getScreenCTM();
+    if (!m) return null;
+    const local = pt.matrixTransform(m.inverse());
+    return { x: local.x, y: -local.y };
+  }
+
+  function seamStroke() {
+    const svg = $("flat");
+    const box = (svg.getAttribute("viewBox") || "0 0 1000 1000").split(/\s+/).map(Number);
+    return (box[2] || 1000) / 1400;
+  }
+
+  function drawSeams(group) {
+    const s = seamStroke();
+    state.seams.forEach((seam, index) => {
+      const line = document.createElementNS(NS, "line");
+      line.setAttribute("x1", seam.x1); line.setAttribute("y1", -seam.y1);
+      line.setAttribute("x2", seam.x2); line.setAttribute("y2", -seam.y2);
+      line.setAttribute("class", "seam");
+      // .seam uses non-scaling-stroke, so the width is screen pixels, not mm.
+      line.setAttribute("stroke-width", 2);
+      group.appendChild(line);
+      for (const end of ["1", "2"]) {
+        const handle = document.createElementNS(NS, "circle");
+        handle.setAttribute("cx", seam["x" + end]); handle.setAttribute("cy", -seam["y" + end]);
+        handle.setAttribute("r", 6 * s);        // radius is model space, so it zooms
+        handle.setAttribute("class", "seam-handle");
+        handle.dataset.seam = String(index); handle.dataset.end = end;
+        group.appendChild(handle);
+      }
+    });
+  }
+
+  function renderSeamList() {
+    const host = $("seam-list");
+    host.innerHTML = "";
+    if (!state.seams.length) {
+      host.textContent = "No seams yet — switch to Flat layout and draw one.";
+      host.className = "info muted";
+      return;
+    }
+    host.className = "info";
+    state.seams.forEach((seam, index) => {
+      const row = document.createElement("div");
+      row.className = "seam-row";
+      const length = Math.hypot(seam.x2 - seam.x1, seam.y2 - seam.y1);
+      const angle = (Math.atan2(seam.y2 - seam.y1, seam.x2 - seam.x1) * 180 / Math.PI).toFixed(0);
+      const label = document.createElement("span");
+      label.textContent = `Seam ${index + 1} · ${length.toFixed(0)} mm · ${angle}°`;
+      const remove = document.createElement("button");
+      remove.className = "linkbtn"; remove.textContent = "remove";
+      remove.addEventListener("click", () => { state.seams.splice(index, 1); pushSeams(); });
+      row.append(label, remove);
+      host.appendChild(row);
+    });
+  }
+
+  async function pushSeams() {
+    renderSeamList();
+    renderFlat();
+    if (!state.runId) return;
+    try {
+      const payload = Object.assign({ seams: state.seams }, sheetSettings());
+      const r = await api.post("/api/sheets/seams", payload);
+      applySheets(r);
+    } catch (e) { log(e.message, true); }
+  }
+
+  function sheetSettings() {
+    const grain = $("opt-grain").value;
+    return {
+      part_spacing_mm: $("opt-spacing").value,
+      seam_gap_mm: $("opt-seamgap").value,
+      grain_angle_deg: grain === "" ? null : grain,
+      allow_180_rotation: $("opt-rot180").checked,
+    };
+  }
+
+  function wireSeamEditing() {
+    const svg = $("flat");
+    svg.addEventListener("pointerdown", (event) => {
+      if (!state.overlays) return;
+      const handle = event.target.closest && event.target.closest(".seam-handle");
+      if (handle) {
+        state.seamDrag = { mode: "move", index: +handle.dataset.seam, end: handle.dataset.end };
+        svg.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+      if (!state.seamMode) return;
+      const p = svgPoint(svg, event);
+      if (!p) return;
+      state.seams.push({ x1: p.x, y1: p.y, x2: p.x, y2: p.y, panel_id: null });
+      state.seamDrag = { mode: "draw", index: state.seams.length - 1, end: "2" };
+      svg.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+    svg.addEventListener("pointermove", (event) => {
+      if (!state.seamDrag) return;
+      const p = svgPoint(svg, event);
+      if (!p) return;
+      const seam = state.seams[state.seamDrag.index];
+      seam["x" + state.seamDrag.end] = p.x;
+      seam["y" + state.seamDrag.end] = p.y;
+      renderFlat();
+    });
+    const finish = (event) => {
+      if (!state.seamDrag) return;
+      const seam = state.seams[state.seamDrag.index];
+      const tiny = Math.hypot(seam.x2 - seam.x1, seam.y2 - seam.y1) < 5;
+      state.seamDrag = null;
+      try { svg.releasePointerCapture(event.pointerId); } catch (_e) { /* already released */ }
+      if (tiny) { state.seams.pop(); renderFlat(); return; }
+      setSeamMode(false);
+      pushSeams();
+    };
+    svg.addEventListener("pointerup", finish);
+    svg.addEventListener("pointercancel", finish);
+  }
+
+  function setSeamMode(on) {
+    state.seamMode = on;
+    $("btn-seam").classList.toggle("active", on);
+    $("flat").classList.toggle("drawing", on);
+    $("seam-hint").textContent = on
+      ? "Drag a line across a panel. Press Escape to cancel."
+      : "Drag a line where a join should go. Drag an end to move it.";
+  }
+
+  // ------------------------------------------------------------ sheet layout
+  function applySheets(payload) {
+    state.sheets = payload;
+    if (payload && Array.isArray(payload.seams)) {
+      state.seams = payload.seams.map((s) => ({ x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2, panel_id: s.panel_id }));
+      renderSeamList();
+    }
+    $("btn-sheets").disabled = !(payload && payload.available);
+    renderSheets();
+  }
+
+  async function refreshSheets() {
+    if (!state.runId) { renderSheets(); return; }
+    try {
+      applySheets(await api.get("/api/sheets"));
+    } catch (e) { log(e.message, true); }
+  }
+
+  async function replanSheets() {
+    if (!state.runId) return;
+    try {
+      applySheets(await api.post("/api/sheets/seams", Object.assign({ seams: state.seams }, sheetSettings())));
+    } catch (e) { log(e.message, true); }
+  }
+
+  function renderSheets() {
+    const svg = $("sheets");
+    const head = $("sheets-head");
+    svg.innerHTML = "";
+    const data = state.sheets;
+    if (!data || !data.available) {
+      $("sheets-empty").hidden = false;
+      head.textContent = (data && data.reason) || "Run auto-fit first — sheets are cut from the fitted outline.";
+      return;
+    }
+    const preview = data.preview;
+    const sheets = (preview && preview.sheets) || [];
+    const over = (data.oversize || []).length;
+    head.textContent =
+      `${sheets.length} sheet${sheets.length === 1 ? "" : "s"} · ${data.piece_count} piece${data.piece_count === 1 ? "" : "s"} · `
+      + `${preview.sheet_width_mm / 25.4}×${preview.sheet_length_mm / 25.4}″ · grain along the long axis`
+      + (over ? ` · ${over} piece${over === 1 ? "" : "s"} still too big — add a seam` : "");
+    $("sheets-empty").hidden = sheets.length > 0;
+    if (!sheets.length) return;
+
+    const W = preview.sheet_width_mm, H = preview.sheet_length_mm;
+    const gap = W * 0.12;
+    const total = sheets.length * W + (sheets.length - 1) * gap;
+    const pad = W * 0.08;
+    svg.setAttribute("viewBox", `${-pad} ${-pad - 60} ${total + 2 * pad} ${H + 2 * pad + 60}`);
+    const stroke = total / 1200;
+    const g = document.createElementNS(NS, "g");
+
+    sheets.forEach((sheet, index) => {
+      const ox = index * (W + gap);
+      const rect = document.createElementNS(NS, "rect");
+      rect.setAttribute("x", ox); rect.setAttribute("y", 0);
+      rect.setAttribute("width", W); rect.setAttribute("height", H);
+      rect.setAttribute("class", "sheet-outline");
+      rect.setAttribute("stroke-width", 2 * stroke);
+      g.appendChild(rect);
+
+      const mx = (W - preview.usable_width_mm) / 2, my = (H - preview.usable_length_mm) / 2;
+      const usable = document.createElementNS(NS, "rect");
+      usable.setAttribute("x", ox + mx); usable.setAttribute("y", my);
+      usable.setAttribute("width", preview.usable_width_mm);
+      usable.setAttribute("height", preview.usable_length_mm);
+      usable.setAttribute("class", "sheet-usable");
+      usable.setAttribute("stroke-width", stroke);
+      g.appendChild(usable);
+
+      for (const ring of sheet.rings) {
+        const poly = document.createElementNS(NS, "polygon");
+        // sheet y is up; SVG y is down, so mirror within the sheet height
+        poly.setAttribute("points", ring.points.map((p) => `${ox + p[0]},${H - p[1]}`).join(" "));
+        poly.setAttribute("class", "sheet-piece");
+        poly.setAttribute("stroke-width", 2 * stroke);
+        const title = document.createElementNS(NS, "title");
+        title.textContent = `${ring.piece_id} (panel ${ring.panel_id}) rotated ${ring.rotation_deg}°`;
+        poly.appendChild(title);
+        g.appendChild(poly);
+      }
+
+      const label = document.createElementNS(NS, "text");
+      label.setAttribute("x", ox); label.setAttribute("y", -18);
+      label.setAttribute("class", "flat-label");
+      label.setAttribute("font-size", 26 * stroke);
+      label.textContent = `Sheet ${sheet.sheet} — ${(sheet.utilisation * 100).toFixed(0)}% used`;
+      g.appendChild(label);
+    });
     svg.appendChild(g);
   }
 
   // ------------------------------------------------------------ data refresh
   async function refreshState() {
     const s = await api.get("/api/state");
+    const runChanged = state.runId !== s.run_id;
     state.scan = s.scan; state.runId = s.run_id;
     renderScanInfo(); renderFiles(s.run_files);
+    if (runChanged && s.run_id) refreshSheets();
     $("btn-outline").disabled = !(s.scan && s.scan.preview_ready) || !!s.active_job;
     $("btn-autofit").disabled = !s.run_id || !!s.active_job;
     $("btn-ingest").disabled = !s.run_id || !!s.active_job;
@@ -289,6 +577,19 @@
       "auto_cam.3dm": "auto_cam.3dm (auto-fit, review in Rhino)", "outline.dxf": "outline.dxf", "autofit_report.md": "auto-fit report",
       "outline_report.md": "outline report", "final_report.md": "ingest report", "calibration_report.md": "calibration report" };
     el.innerHTML = `<div class="muted">run ${state.runId}</div>`;
+    const sheetFiles = (state.sheets && state.sheets.files) || [];
+    for (const entry of sheetFiles) {
+      const a = document.createElement("a");
+      a.href = `/api/file/${encodeURIComponent(state.runId)}/${entry.name}`;
+      a.textContent = `⬇ ${entry.name} — sheet ${entry.sheet} (${entry.pieces.length} piece${entry.pieces.length === 1 ? "" : "s"}, ${(entry.utilisation * 100).toFixed(0)}% used)`;
+      el.appendChild(a);
+    }
+    if (sheetFiles.length) {
+      const report = document.createElement("a");
+      report.href = `/api/file/${encodeURIComponent(state.runId)}/sheet_report.md?inline=1`;
+      report.target = "_blank"; report.textContent = "⬇ sheet layout report";
+      el.appendChild(report);
+    }
     for (const name of order) {
       const a = document.createElement("a");
       if (files && files[name]) {
@@ -417,10 +718,30 @@
       const f = $("ingest-input").files[0]; if (!f) { setStatus("choose the .3dm you drew on", "error"); return; }
       const fd = new FormData(); fd.append("file", f); startJob("/api/run/ingest", fd, "Ingest " + f.name);
     });
+    $("btn-pick-folder").addEventListener("click", async () => {
+      try {
+        setStatus("Choose a scan folder…", "busy");
+        const r = await api.post("/api/scan/pick", { folder: true });
+        if (r.cancelled) { setStatus("Ready"); return; }
+        log("— Scan folder: " + r.scan.name); trackJob(r.job_id);
+      } catch (e) { setStatus(e.message, "error"); log(e.message, true); }
+    });
+    $("btn-seam").addEventListener("click", () => setSeamMode(!state.seamMode));
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (state.seamDrag) { state.seams.splice(state.seamDrag.index, 1); state.seamDrag = null; renderFlat(); }
+      setSeamMode(false);
+    });
+    for (const id of ["opt-spacing", "opt-seamgap", "opt-grain"]) {
+      $(id).addEventListener("change", replanSheets);
+    }
+    $("opt-rot180").addEventListener("change", replanSheets);
+    $("btn-sheets").addEventListener("click", () => startJob("/api/sheets/export", sheetSettings(), "Sheet DXFs"));
+    wireSeamEditing();
     $("btn-fit").addEventListener("click", fitView);
     $("opt-xray").addEventListener("change", (e) => { state.xray = e.target.checked; for (const id in state.layers) { state.layers[id].obj.material.depthTest = !state.xray; state.layers[id].obj.material.needsUpdate = true; } });
     $("opt-opacity").addEventListener("input", (e) => { meshMaterial.opacity = parseFloat(e.target.value); });
-    $("opt-shading").addEventListener("change", (e) => applyShading(e.target.value));
+    $("opt-shading").addEventListener("change", (e) => { state.shadingChosen = true; applyShading(e.target.value); });
     $("opt-light").addEventListener("input", updateLight);
     $("opt-light-el").addEventListener("input", updateLight);
     document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -435,10 +756,13 @@
   }
 
   function showTab(tab) {
+    state.tab = tab;
     document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x.dataset.tab === tab));
-    const flat = tab === "flat";
-    $("viewflat").hidden = !flat; $("view3d").style.display = flat ? "none" : "";
-    if (!flat) resize();
+    $("viewflat").hidden = tab !== "flat";
+    $("viewsheets").hidden = tab !== "sheets";
+    $("view3d").style.display = tab === "3d" ? "" : "none";
+    if (tab === "3d") resize();
+    if (tab === "sheets") refreshSheets();
   }
 
   async function uploadScan(file) {

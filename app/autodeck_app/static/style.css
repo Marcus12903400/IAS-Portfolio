@@ -50,9 +50,45 @@ label.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 #tabs { display: flex; gap: 0; background: #fff; border-bottom: 1px solid var(--line); }
 #tabs button { width: auto; margin: 0; border: none; border-radius: 0; background: transparent; color: var(--muted); padding: 10px 18px; border-bottom: 2px solid transparent; }
 #tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
-#view3d, #viewflat { position: relative; flex: 1; min-height: 0; }
+#view3d, #viewflat, #viewsheets { position: relative; flex: 1; min-height: 0; }
+#viewflat, #viewsheets { display: flex; flex-direction: column; }
+/* An explicit `display` beats the hidden attribute's UA default, so the tab
+   switcher would otherwise leave both views stacked. Restore hidden's meaning. */
+#viewflat[hidden], #viewsheets[hidden] { display: none; }
 #gl { width: 100%; height: 100%; display: block; }
-#flat { width: 100%; height: 100%; display: block; background: #14171c; }
+/* An <svg> with a viewBox has an intrinsic aspect ratio and will grow past its
+   flex parent, pushing tall sheet layouts below the fold. Pinning it to a
+   positioned wrapper makes the viewport authoritative and lets
+   preserveAspectRatio letterbox instead. */
+.viewbody { position: relative; flex: 1 1 0; min-height: 0; }
+#flat, #sheets { position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; background: #14171c; }
+
+/* toolbar above the flat / sheet views */
+.viewtools { display: flex; align-items: center; gap: 12px; padding: 6px 12px;
+  background: #1b1f26; border-bottom: 1px solid #2a2f38; flex: none; }
+.viewtools button { width: auto; margin: 0; padding: 5px 11px; font-size: 13px; }
+.viewtools button.active { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+.hint.inline { margin-top: 0; color: #9aa0aa; }
+
+/* seams drawn over the flat layout */
+#flat.drawing { cursor: crosshair; }
+.seam { stroke: #ff375f; stroke-dasharray: 14 9; stroke-linecap: round; fill: none;
+  vector-effect: non-scaling-stroke; }
+.seam-handle { fill: #ff375f; stroke: #ffffff; stroke-width: 1; cursor: grab;
+  vector-effect: non-scaling-stroke; }
+.seam-handle:hover { fill: #ffffff; stroke: #ff375f; }
+.seam-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.seam-row span { flex: 1; }
+.linkbtn { width: auto; margin: 0; padding: 2px 6px; font-size: 12px; background: transparent;
+  color: var(--accent); border: none; text-decoration: underline; cursor: pointer; }
+.linkbtn:hover { background: transparent; color: var(--accent-dark); }
+
+/* sheet layout */
+.sheet-outline { fill: #ffffff; stroke: #6d737d; vector-effect: non-scaling-stroke; }
+.sheet-usable { fill: none; stroke: #c6cad1; stroke-dasharray: 10 8; vector-effect: non-scaling-stroke; }
+.sheet-piece { fill: #d6e7fa; stroke: #0a5abe; vector-effect: non-scaling-stroke; }
+.sheet-piece:hover { fill: #b9d8f7; }
 .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9a9fa8; pointer-events: none; font-size: 15px; }
 .empty[hidden] { display: none; }
 

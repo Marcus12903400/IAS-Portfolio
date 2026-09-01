@@ -206,7 +206,9 @@ def preview(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None 
                 origin=np.asarray(entry["origin_mm"], dtype=float),
             )
             for loop in [piece.outer, *piece.holes]:
-                points, _s = sheets_mod.sample_loop(loop, max(step, 2.0))
+                # Coarser than the geometry step: this is for drawing on screen,
+                # where 4 mm chords are already sub-pixel on a 2 m sheet.
+                points, _s = sheets_mod.sample_loop(loop, max(step, 4.0))
                 moved = placement.apply(points, rotation)
                 rings.append({
                     "piece_id": entry["piece_id"], "panel_id": entry["panel_id"],
