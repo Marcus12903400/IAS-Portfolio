@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autodeck2"
+version = "2.0.0a1"
+description = "AutoDeck v2: raw deck outline for hand-drawn CAM, with validation and calibration"
+requires-python = ">=3.12"
+dependencies = [
+  # AutoDeck v1 (package "autodeck") is not on PyPI. It lives beside this folder
+  # as ../engine-v1 and is installed by the AutoDeck launcher BEFORE this
+  # package, so it is deliberately not listed as a resolvable dependency here.
+  "numpy>=1.26,<3",
+  "scipy>=1.13,<2",
+  "shapely==2.1.1",
+  "ezdxf==1.4.4",
+  "rhino3dm>=8.0",
+  "libigl==2.6.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+autodeck2 = "autodeck2.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["autodeck2*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: real-scan runs (minutes); deselect with -m 'not slow'"]

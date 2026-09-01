@@ -1,0 +1,283 @@
+{
+  "mesh": {
+    "analysis_resolution_mm": 2.5,
+    "minimum_component_faces": 1,
+    "degenerate_area_mm2": 1e-8,
+    "default_input_units": "mm",
+    "inconsistent_normal_warning_fraction": 0.10
+  },
+  "orientation": {
+    "core_slope_deg": 22.0,
+    "max_slope_deg": 25.0,
+    "normal_smoothing_iterations": 3,
+    "smoothing_boundary_cost": 0.45,
+    "noise_recovery_margin_deg": 5.0,
+    "noise_recovery_neighbor_fraction": 0.60,
+    "noise_recovery_iterations": 2
+  },
+  "curvature": {
+    "scales_mm": [5.0, 15.0, 40.0, 100.0],
+    "normal_turn_soft_deg_per_mm": 0.35,
+    "normal_turn_hard_deg_per_mm": 1.5,
+    "compound_curvature_soft_per_mm2": 0.0004,
+    "compound_curvature_hard_per_mm2": 0.003
+  },
+  "boundary": {
+    "normal_turn_weight": 0.38,
+    "dihedral_weight": 0.17,
+    "ridge_weight": 0.10,
+    "valley_weight": 0.18,
+    "fine_scale_weight": 0.12,
+    "gap_weight": 0.05,
+    "dihedral_soft_degrees": 8.0,
+    "dihedral_hard_degrees": 40.0,
+    "coherence_high_score": 0.68,
+    "coherence_neighbor_fraction": 0.55,
+    "coherence_fill_score": 0.74
+  },
+  "markers": {
+    "dictionary": "DICT_4X4_50",
+    "seed_radius_mm": 12.0,
+    "paper_suppression_radius_mm": 90.0,
+    "suppression_factor": 0.05,
+    "overlap_warning_score": 0.72
+  },
+  "segmentation": {
+    "mode": "orientation",
+    "max_boundary_cost": 0.56,
+    "minimum_conformability": 0.12,
+    "minimum_region_area_mm2": 100.0,
+    "minimum_candidate_area_mm2": 10000.0,
+    "minimum_loop_length_mm": 5.0,
+    "segmentation_failure_orientation_area_mm2": 100000.0
+  },
+  "boundary_curve": {
+    "simplify_tolerance_mm": 0.75
+  },
+  "verification": {
+    "display_lift_mm": 1.5
+  },
+  "up_axis": {
+    "mode": "+Z",
+    "sample_face_count": 200000,
+    "implausible_area_ratio": 0.20
+  },
+  "topview": {
+    "enabled": true,
+    "raster_resolution_mm": 1.0,
+    "supported_resolutions_mm": [0.75, 1.0, 1.5, 2.0],
+    "margin_mm": 10.0,
+    "analysis_splat_radius_mm": 2.5,
+    "floor_sample_band_mm": 6.0,
+    "fine_face_chunk_size": 500000,
+    "base_surface_radius_mm": 30.0
+  },
+  "nonskid": {
+    "density_scales_mm": [10.0, 20.0, 40.0],
+    "residual_activity_radius_mm": 5.0,
+    "local_normalization_radius_mm": 80.0,
+    "minimum_region_area_mm2": 1000.0,
+    "close_gap_mm": 3.0,
+    "loose_quantile": 0.65,
+    "medium_quantile": 0.80,
+    "strict_quantile": 0.92,
+    "maximum_regions_per_layer": 20,
+    "contour_simplify_tolerance_mm": 1.0,
+    "absolute_residual_p95_minimum_mm": 0.40,
+    "absolute_density_p95_minimum_per_mm": 0.12,
+    "density_background_floor_per_mm": 0.05,
+    "density_contrast_ratio_minimum": 1.50,
+    "weak_signal_fraction": 0.80
+  },
+  "seams": {
+    "coherence_radius_mm": 8.0,
+    "close_gap_mm": 2.0,
+    "minimum_high_confidence_length_mm": 100.0,
+    "minimum_low_confidence_length_mm": 50.0,
+    "high_response_quantile": 0.985,
+    "low_response_quantile": 0.96,
+    "minimum_coherence": 0.45,
+    "closed_endpoint_gap_mm": 12.0,
+    "maximum_curves_per_layer": 20,
+    "simplify_tolerance_mm": 1.0
+  },
+  "obstacles": {
+    "close_gap_mm": 2.0,
+    "loose_minimum_area_mm2": 100.0,
+    "medium_minimum_area_mm2": 400.0,
+    "strict_minimum_area_mm2": 1000.0,
+    "height_confidence_mm": 5.0,
+    "merge_nested_distance_mm": 12.0,
+    "maximum_hypotheses_per_layer": 20,
+    "contour_simplify_tolerance_mm": 1.0
+  },
+  "v02_export": {
+    "maximum_reasonable_default_curves": 100,
+    "write_raw_relief_curves": false
+  },
+  "curve_conditioning": {
+    "enabled": true,
+    "resample_spacing_mm": 2.5,
+    "supported_resample_spacing_mm": [1.0, 2.0, 2.5, 5.0],
+    "corner_scales_mm": [5.0, 10.0, 20.0, 40.0],
+    "corner_turn_threshold_deg": 35.0,
+    "corner_persistence_scales": 2,
+    "floor_side_offsets_mm": [3.0, 5.0, 8.0, 10.0, 15.0],
+    "floor_fit_radius_mm": 18.0,
+    "minimum_floor_fit_samples": 12,
+    "deviation_debug_spacing_mm": 100.0,
+    "profiles": {
+      "deck": {"xy_window_mm": 18.0, "xy_strength": 0.65, "max_xy_deviation_mm": 1.5, "z_window_mm": 35.0, "simplify_tolerance_mm": 0.75},
+      "secondary": {"xy_window_mm": 18.0, "xy_strength": 0.65, "max_xy_deviation_mm": 1.5, "z_window_mm": 35.0, "simplify_tolerance_mm": 0.75},
+      "nonskid": {"xy_window_mm": 12.0, "xy_strength": 0.55, "max_xy_deviation_mm": 1.0, "z_window_mm": 24.0, "simplify_tolerance_mm": 0.75},
+      "obstacle": {"xy_window_mm": 8.0, "xy_strength": 0.40, "max_xy_deviation_mm": 0.75, "z_window_mm": 18.0, "simplify_tolerance_mm": 0.5},
+      "seam": {"xy_window_mm": 6.0, "xy_strength": 0.30, "max_xy_deviation_mm": 0.5, "z_window_mm": 12.0, "simplify_tolerance_mm": 0.4}
+    }
+  },
+  "flattening": {
+    "enabled": true,
+    "strategy": "planar",
+    "allow_test_output_when_warn": true,
+    "plane_sample_limit": 200000,
+    "plane_trim_iterations": 3,
+    "distortion_warning_p95_percent": 1.0,
+    "distortion_failure_p95_percent": 3.0,
+    "distortion_warning_rms_percent": 1.0,
+    "distortion_failure_rms_percent": 5.0,
+    "distortion_warning_maximum_percent": 10.0,
+    "distortion_failure_maximum_percent": 100.0,
+    "primitive_fit_error_mm": 0.5,
+    "supported_primitive_fit_errors_mm": [0.25, 0.5, 1.0],
+    "write_scale_check_dxf": true
+  },
+  "development": {
+    "enabled": true,
+    "strategy": "auto",
+    "mesh_resolution_mm": 5.0,
+    "base_surface_scale_mm": 30.0,
+    "maximum_base_displacement_mm": 5.0,
+    "minimum_triangle_area_mm2": 0.0001,
+    "minimum_distortion_edge_mm": 1.0,
+    "planar_residual_rms_mm": 0.75,
+    "planar_residual_p95_mm": 1.5,
+    "distortion_warning_p95_percent": 1.0,
+    "distortion_failure_p95_percent": 5.0,
+    "arap_iterations": 50,
+    "maximum_curve_mapping_distance_mm": 12.0
+  },
+  "manufacturing_fit": {
+    "enabled": true,
+    "reference_max_deviation_mm": 3.00,
+    "maximum_fit_deviation_mm": 0.75,
+    "target_fit_deviation_mm": 0.75,
+    "absolute_max_fit_deviation_mm": 7.00,
+    "analytic_primitive_absolute_max_deviation_mm": 1.50,
+    "forbidden_side_epsilon_mm": 0.35,
+    "validation_sample_spacing_mm": 0.5,
+    "minimum_numerical_sample_separation_mm": 0.10,
+    "minimum_span_length_mm": 5.0,
+    "maximum_join_gap_mm": 0.01,
+    "maximum_arc_sweep_deg": 270.0,
+    "spline_parameterization": "centripetal",
+    "spline_fairness_weight": 0.001,
+    "spline_safe_normal_scale_mm": 20.0,
+    "spline_safe_corridor_offset_mm": 0.50,
+    "spline_corridor_smoothing_mm": 0.0,
+    "spline_safe_constraint_margin_mm": 0.36,
+    "initial_spline_control_points": 6,
+    "maximum_spline_control_points": 250,
+    "spline_knots_per_iteration": 4,
+    "absolute_tolerance_complexity_ratio": 0.60,
+    "corner_profiles": {
+      "deck": {
+        "diagnostic_spacing_mm": 5.0,
+        "diagnostic_smoothing_mm": 5.0,
+        "scales_mm": [10.0, 20.0, 40.0, 80.0],
+        "turn_threshold_deg": 35.0,
+        "persistence_scales": 3,
+        "cluster_distance_mm": 15.0,
+        "minimum_separation_mm": 12.0,
+        "maximum_anchor_density_per_m": 25.0
+      },
+      "small_obstacle": {
+        "diagnostic_spacing_mm": 1.5,
+        "diagnostic_smoothing_mm": 1.5,
+        "scales_mm": [3.0, 6.0, 12.0, 24.0],
+        "turn_threshold_deg": 35.0,
+        "persistence_scales": 3,
+        "cluster_distance_mm": 5.0,
+        "minimum_separation_mm": 4.0,
+        "maximum_anchor_density_per_m": 100.0
+      }
+    }
+  },
+  "robust_reference": {
+    "enabled": true,
+    "persistence_scales_mm": [5.0, 10.0, 20.0, 40.0],
+    "curvature_regime_threshold_per_mm": 0.002,
+    "minimum_curvature_regime_length_mm": 20.0,
+    "signed_safety_allowance_mm": 0.25,
+    "minimum_numerical_sample_separation_mm": 0.10,
+    "maximum_reference_shift_warning_mm": 8.0
+  },
+  "polyarc_fit": {
+    "enabled": true,
+    "use_manual_broad_regime_fit_for_primary": true,
+    "manual_primary_minimum_point_count": 500,
+    "manual_primary_minimum_perimeter_mm": 5000.0,
+    "manual_reference_scales_mm": [20.0, 40.0, 80.0, 160.0],
+    "manual_fit_headroom_mm": 0.05,
+    "manual_candidate_sampling_mm": 3.0,
+    "manual_dp_node_stride": 2,
+    "manual_benchmark_line_count": 14,
+    "manual_benchmark_arc_count": 18,
+    "repair_manual_joins_locally": true,
+    "manual_join_trim_mm": 5.0,
+    "manual_join_maximum_trim_fraction": 0.40,
+    "manual_join_biarc_ratios": [1.0, 0.5, 2.0, 0.25, 4.0, 0.125, 8.0, 0.0625, 16.0],
+    "adaptive_refine_invalid_manual_primary": true,
+    "absolute_fit_tolerance_mm": 3.00,
+    "signed_safety_penetration_allowance_mm": 2.0,
+    "tangent_target_deg": 0.05,
+    "tangent_max_deg": 0.10,
+    "validation_sampling_mm": 0.50,
+    "minimum_numerical_sample_separation_mm": 0.10,
+    "tangent_window_mm": 25.0,
+    "maximum_tangent_local_offset_deg": 0.0,
+    "safe_corridor_offset_mm": 2.00,
+    "manual_safe_corridor_offset_mm": 1.00,
+    "manual_corridor_target_smoothing_mm": 20.0,
+    "maximum_guide_displacement_mm": 2.75,
+    "minimum_guide_sample_separation_mm": 1.00,
+    "safe_normal_scale_mm": 8.0,
+    "corridor_target_smoothing_mm": 20.0,
+    "max_recursive_depth": 28,
+    "use_longest_valid_chain": true,
+    "use_stateful_tangent_chain_for_open_curves": true,
+    "analytic_transition_curvature_per_mm": 0.002,
+    "longest_chain_consecutive_failure_limit": 32,
+    "longest_line_preference_ratio": 0.75,
+    "maximum_reduction_window": 12,
+    "preferred_minimum_primitive_length_mm": 25.0,
+    "warning_primitive_length_mm": 10.0,
+    "micro_primitive_length_mm": 3.0
+  },
+  "pattern": {
+    "selected": "none",
+    "teak_spacing_mm": 63.500,
+    "diamond_long_diagonal_mm": 152.400,
+    "diamond_short_diagonal_mm": 76.200,
+    "hex_across_flats_mm": 152.400,
+    "clip_minimum_fragment_mm": 0.50,
+    "deduplication_tolerance_mm": 0.001,
+    "axis_slice_count": 31,
+    "axis_minimum_slice_points": 4,
+    "dxf_roundtrip_tolerance_mm": 0.01
+  },
+  "dxf": {
+    "roundtrip_geometry_tolerance_mm": 0.10,
+    "polyline_chord_error_mm": 0.10,
+    "polyline_maximum_segment_mm": 250.0,
+    "write_scale_check": true
+  }
+}

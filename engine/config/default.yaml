@@ -1,0 +1,63 @@
+{
+  "engine": {
+    "default_units": "mm",
+    "up_axis": "+Z",
+    "hint_layer_prefixes": ["AUTODECK_CALIBRATION::", "AUTODECK_DEBUG::OBSTACLE_ALTERNATIVES"],
+    "feature_layer_prefixes": ["AUTODECK::SEAMS_", "AUTODECK::HATCH_", "AUTODECK::NONSKID_"],
+    "obstacle_layer_prefixes": ["AUTODECK::OBSTACLES_"]
+  },
+  "assignment": {
+    "decisive_fraction": 0.5,
+    "nearest_mesh_max_distance_factor": 2.0
+  },
+  "layout": {
+    "mode": "nest",
+    "nest_gap_mm": 150.0,
+    "orientation_tolerance_deg": 1.0,
+    "nested_overlap_fraction": 0.9
+  },
+  "teak": {
+    "enabled_default": true
+  },
+  "pattern": {
+    "selected_default": "teak"
+  },
+  "ingest": {
+    "snap_tolerance_mm": 0.5,
+    "loose_snap_tolerance_mm": 5.0,
+    "corner_snap_mm": 10.0,
+    "tangent_target_deg": 0.05,
+    "tangent_max_deg": 0.10,
+    "tangent_intent_max_deg": 1.0,
+    "unmarked_corner_min_deg": 5.0,
+    "curve_fit_tolerance_mm": 0.01,
+    "sample_spacing_mm": 0.5,
+    "minimum_segment_length_mm": 0.05
+  },
+  "outline": {
+    "write_dxf": true,
+    "label_font_height_mm": 40.0
+  },
+  "autofit": {
+    "band_mm": 3.5,
+    "band_quantile": 0.95,
+    "spike_mm": 6.5,
+    "resample_mm": 5.0,
+    "min_line_length_mm": 120.0,
+    "small_loop_line_fraction": 0.12,
+    "corner_angle_deg": 25.0,
+    "corner_max_gap_mm": 60.0,
+    "corner_snap_mm": 12.0,
+    "max_arcs_per_connection": 3,
+    "min_arc_radius_mm": 8.0,
+    "trim_candidates_mm": [0, 15, 30, 60, 100, 150, 250],
+    "intermediate_line_min_mm": 40.0,
+    "max_line_trim_fraction": 0.45,
+    "max_line_extend_mm": 400.0,
+    "arc_anchor_min_mm": 120.0,
+    "corner_concentration": 0.6,
+    "edge_bias_mm": 1.5,
+    "inward_extra_mm": 3.0,
+    "fit_reference": "robust"
+  }
+}

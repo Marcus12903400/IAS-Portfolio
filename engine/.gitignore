@@ -1,0 +1,14 @@
+.venv/
+venv/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+cache/*
+!cache/README.md
+outputs/runs/*
+!outputs/runs/.gitkeep
+inputs/boats/*
+!inputs/boats/README.md
+config/local.yaml
+.DS_Store

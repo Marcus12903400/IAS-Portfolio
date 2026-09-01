@@ -1,0 +1,4 @@
+#!/bin/bash
+# AutoDeck.app: opens the launcher in a Terminal window so progress is visible.
+HERE="$(cd "$(dirname "$0")/../../.." && pwd)"
+open -a Terminal "$HERE/AutoDeck.command"

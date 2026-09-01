@@ -1,0 +1,2345 @@
+{
+  "run_id": "21kwcockpit-20260830-150126",
+  "drawing": "outputs/runs/21kwcockpit-20260830-150126/outline.3dm",
+  "status": "REJECTED",
+  "rejections": [],
+  "final_dxf": {},
+  "analysis": {
+    "loose_snap_tolerance_mm": 5.0,
+    "panels": [
+      {
+        "panel_id": 1,
+        "segment_count": 61,
+        "chain_count": 9,
+        "open_chain_count": 4,
+        "open_ends": [
+          {
+            "chain": 0,
+            "start_mm": [
+              247.54587428282858,
+              483.43567001999907
+            ],
+            "end_mm": [
+              320.91422098817185,
+              -448.8375166672052
+            ],
+            "closing_gap_mm": 935.1557137258962,
+            "nearest_other_open_end_mm": 73.1984100898183
+          },
+          {
+            "chain": 1,
+            "start_mm": [
+              318.28654381645686,
+              489.8587676297216
+            ],
+            "end_mm": [
+              1170.8896103973457,
+              510.5301808576238
+            ],
+            "closing_gap_mm": 852.8536196018483,
+            "nearest_other_open_end_mm": 65.5142868550883
+          },
+          {
+            "chain": 2,
+            "start_mm": [
+              392.686443611673,
+              -434.4585285470416
+            ],
+            "end_mm": [
+              1230.6096126441628,
+              -360.98833063300657
+            ],
+            "closing_gap_mm": 841.137983438495,
+            "nearest_other_open_end_mm": 47.58548345680735
+          },
+          {
+            "chain": 3,
+            "start_mm": [
+              1276.3734902444633,
+              -347.9481717841734
+            ],
+            "end_mm": [
+              1236.1957064005346,
+              505.31140638912393
+            ],
+            "closing_gap_mm": 854.2049883131582,
+            "nearest_other_open_end_mm": 65.5142868550883
+          }
+        ],
+        "branch_errors": [],
+        "chains": [
+          {
+            "index": 0,
+            "closed": false,
+            "reference": "RAW obstacle 1",
+            "side": "obstacle",
+            "primitive_count": 5,
+            "line_count": 3,
+            "arc_count": 2,
+            "total_length_mm": 1398.5138683625867,
+            "primitives_per_metre": 3.5752237522350203,
+            "join_classes": {
+              "marked_corner": 0,
+              "tangent": 0,
+              "near_tangent": 1,
+              "unmarked_corner": 3
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 6.202111239247665,
+                "p95_mm": 5.029087834920408,
+                "mean_mm": 1.9697800445948301,
+                "count": 2805
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 6.018267720652028,
+                "p95_mm": 2.864130794297228,
+                "mean_mm": 1.2534029437658605,
+                "count": 1080
+              },
+              "deck_side_shortfall": {
+                "max_mm": 6.202111239247665,
+                "p95_mm": 5.271094461607557,
+                "mean_mm": 2.4182944033747074,
+                "count": 1725
+              },
+              "signed_min_mm": -6.018267720652028,
+              "signed_max_mm": 6.202111239247665
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  247.54587428282858,
+                  483.43567001999907
+                ],
+                "end_mm": [
+                  45.805050826808035,
+                  476.2700703751077
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 201.86804023169222,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object d8bc74d7-470e-4eca-a4ac-fe45522bd6e9[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  45.805050826808035,
+                  476.2700703751077
+                ],
+                "end_mm": [
+                  6.384116976958033,
+                  442.51398641356855
+                ],
+                "center_mm": [
+                  42.07225414019328,
+                  440.6548343185224
+                ],
+                "radius_mm": 35.773423577433675,
+                "sweep_deg": 93.00117405794612,
+                "length_mm": 58.06658747026728,
+                "bulge": 0.4296399743668522,
+                "source": "USER_CAM::PANEL_1 object 997a1c96-95ab-4f6b-bf10-ed5bfe5a5d5c"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  6.384116976958033,
+                  442.51398641356855
+                ],
+                "end_mm": [
+                  77.83507661311043,
+                  -438.19502695362473
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 883.6026289340374,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 91f9b1be-868c-485f-a158-d940f3e912c8[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  77.83507661311043,
+                  -438.19502695362473
+                ],
+                "end_mm": [
+                  106.38763914521076,
+                  -461.384273554106
+                ],
+                "center_mm": [
+                  105.54161148690376,
+                  -433.23456007091715
+                ],
+                "radius_mm": 28.154753779098574,
+                "sweep_deg": 81.57101765489678,
+                "length_mm": 40.08343960238357,
+                "bulge": 0.37175272355397804,
+                "source": "USER_CAM::PANEL_1 object f8c4e9e3-0d24-42db-a912-f3b27059dc7f"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  106.38763914521076,
+                  -461.384273554106
+                ],
+                "end_mm": [
+                  320.91422098817185,
+                  -448.8375166672052
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 214.8931721242061,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0550dfa4-421a-41cf-895e-881abdf7f27a[0]"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  45.805050826808035,
+                  476.2700703751077
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 8.017491991906903,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  6.384116976958033,
+                  442.51398641356855
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 7.620279323930528,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  77.83507661311043,
+                  -438.19502695362473
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 5.512278670408388,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 3,
+                "point_mm": [
+                  106.38763914521076,
+                  -461.384273554106
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 1.6256939717173775,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "near_tangent"
+              }
+            ]
+          },
+          {
+            "index": 1,
+            "closed": false,
+            "reference": "RAW obstacle 1",
+            "side": "obstacle",
+            "primitive_count": 2,
+            "line_count": 1,
+            "arc_count": 1,
+            "total_length_mm": 855.6824810850738,
+            "primitives_per_metre": 2.337315586342074,
+            "join_classes": {
+              "marked_corner": 0,
+              "tangent": 0,
+              "near_tangent": 1,
+              "unmarked_corner": 0
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 9.83815711265348,
+                "p95_mm": 8.530860255609854,
+                "mean_mm": 3.0129276646960643,
+                "count": 1715
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 5.191181297024524,
+                "p95_mm": 4.064618130141064,
+                "mean_mm": 2.1060783124576847,
+                "count": 1235
+              },
+              "deck_side_shortfall": {
+                "max_mm": 9.83815711265348,
+                "p95_mm": 9.386052365743254,
+                "mean_mm": 5.34617547722606,
+                "count": 480
+              },
+              "signed_min_mm": -5.191181297024524,
+              "signed_max_mm": 9.83815711265348
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  318.28654381645686,
+                  489.8587676297216
+                ],
+                "end_mm": [
+                  1008.6153679262391,
+                  532.1674684853683
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 691.6241114687133,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object f8d01c85-6d0c-4277-b2b9-4827d3d834a4[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1008.6153679262391,
+                  532.1674684853683
+                ],
+                "end_mm": [
+                  1170.8896103973457,
+                  510.5301808576238
+                ],
+                "center_mm": [
+                  995.4665291451687,
+                  -194.56467075158832
+                ],
+                "radius_mm": 726.720189308682,
+                "sweep_deg": -12.934623684745429,
+                "length_mm": 164.05836961636058,
+                "bulge": -0.05649794197076366,
+                "source": "USER_CAM::PANEL_1 object 2909da30-6eec-49ea-8e57-6b3f273675a5"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  1008.6153679262391,
+                  532.1674684853683
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 4.543687965928481,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "near_tangent"
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "closed": false,
+            "reference": "RAW obstacle 1",
+            "side": "obstacle",
+            "primitive_count": 2,
+            "line_count": 1,
+            "arc_count": 1,
+            "total_length_mm": 842.2804249168382,
+            "primitives_per_metre": 2.3745060918368943,
+            "join_classes": {
+              "marked_corner": 0,
+              "tangent": 0,
+              "near_tangent": 1,
+              "unmarked_corner": 0
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 3.976980268696509,
+                "p95_mm": 2.5539398080152056,
+                "mean_mm": 0.9326923929721946,
+                "count": 1687
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 3.976980268696509,
+                "p95_mm": 2.8058738884009156,
+                "mean_mm": 0.9587529945134584,
+                "count": 711
+              },
+              "deck_side_shortfall": {
+                "max_mm": 3.653942253682955,
+                "p95_mm": 2.3558199196876797,
+                "mean_mm": 0.9137076719723602,
+                "count": 976
+              },
+              "signed_min_mm": -3.976980268696509,
+              "signed_max_mm": 3.653942253682955
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  392.686443611673,
+                  -434.4585285470416
+                ],
+                "end_mm": [
+                  1109.6918066535243,
+                  -383.1506006342452
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 718.8387817149835,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object b730bfa9-37d7-4d37-8b51-e6dc1d777b03[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1109.6918066535243,
+                  -383.1506006342452
+                ],
+                "end_mm": [
+                  1230.6096126441628,
+                  -360.98833063300657
+                ],
+                "center_mm": [
+                  1099.775858343367,
+                  8.48746418763499
+                ],
+                "radius_mm": 391.85999762480503,
+                "sweep_deg": 18.049010397835865,
+                "length_mm": 123.44164320185469,
+                "bulge": 0.07891688321877642,
+                "source": "USER_CAM::PANEL_1 object bb40eef9-62df-4f1f-b154-ebaec4b284cf"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  1109.6918066535243,
+                  -383.1506006342452
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 2.642659849517525,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "near_tangent"
+              }
+            ]
+          },
+          {
+            "index": 3,
+            "closed": false,
+            "reference": "RAW obstacle 1",
+            "side": "obstacle",
+            "primitive_count": 4,
+            "line_count": 1,
+            "arc_count": 3,
+            "total_length_mm": 1164.1901317212598,
+            "primitives_per_metre": 3.435864890974453,
+            "join_classes": {
+              "marked_corner": 0,
+              "tangent": 0,
+              "near_tangent": 1,
+              "unmarked_corner": 2
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 7.284709555511716,
+                "p95_mm": 5.485306545318098,
+                "mean_mm": 2.056150783426618,
+                "count": 2335
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 7.284709555511716,
+                "p95_mm": 5.818963909884864,
+                "mean_mm": 2.217339015020478,
+                "count": 1357
+              },
+              "deck_side_shortfall": {
+                "max_mm": 4.448968375685313,
+                "p95_mm": 4.081108489578277,
+                "mean_mm": 1.8324979917365687,
+                "count": 978
+              },
+              "signed_min_mm": -7.284709555511716,
+              "signed_max_mm": 4.448968375685313
+            },
+            "segments": [
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1276.3734902444633,
+                  -347.9481717841734
+                ],
+                "end_mm": [
+                  1376.3649419086628,
+                  -318.42580879282036
+                ],
+                "center_mm": [
+                  887.8494482011614,
+                  1139.061208821422
+                ],
+                "radius_mm": 1537.0529581241992,
+                "sweep_deg": 3.887118935900686,
+                "length_mm": 104.27832049379023,
+                "bulge": 0.016962382500483486,
+                "source": "USER_CAM::PANEL_1 object c0702744-766f-4c8a-9add-211d10ec93ad"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1376.3649419086628,
+                  -318.42580879282036
+                ],
+                "end_mm": [
+                  1543.0027908974448,
+                  -97.64200847237123
+                ],
+                "center_mm": [
+                  1304.6146066989443,
+                  -91.17046654738898
+                ],
+                "radius_mm": 238.3945208276139,
+                "sweep_deg": 70.92272725939834,
+                "length_mm": 295.093106760705,
+                "bulge": 0.31973084994574685,
+                "source": "USER_CAM::PANEL_1 object 2794104d-59ea-406a-9cfa-a7a2ade44418"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1543.0027908974448,
+                  -97.64200847237123
+                ],
+                "end_mm": [
+                  1510.393129243425,
+                  300.3179117451633
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 399.29373665603134,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 6a76e55c-8d59-4865-acd3-3fa200e7b569[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1510.393129243425,
+                  300.3179117451633
+                ],
+                "end_mm": [
+                  1236.1957064005346,
+                  505.31140638912393
+                ],
+                "center_mm": [
+                  1230.3913662750815,
+                  211.9958096037544
+                ],
+                "radius_mm": 293.48720976895856,
+                "sweep_deg": 71.35928675971006,
+                "length_mm": 365.52496781073336,
+                "bulge": 0.3218317108319901,
+                "source": "USER_CAM::PANEL_1 object f1a06b2d-df9c-49b6-a92e-817e9be0fc61"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  1376.3649419086628,
+                  -318.42580879282036
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 1.0077028785258328,
+                "before": "ARC",
+                "after": "ARC",
+                "class": "near_tangent"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  1543.0027908974448,
+                  -97.64200847237123
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 6.239500045014369,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  1510.393129243425,
+                  300.3179117451633
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 12.82258193834728,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              }
+            ]
+          },
+          {
+            "index": 4,
+            "closed": true,
+            "reference": "RAW outer",
+            "side": "outer",
+            "primitive_count": 31,
+            "line_count": 16,
+            "arc_count": 15,
+            "total_length_mm": 10981.131248766998,
+            "primitives_per_metre": 2.8230242675116735,
+            "join_classes": {
+              "marked_corner": 9,
+              "tangent": 2,
+              "near_tangent": 9,
+              "unmarked_corner": 11
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 6.415629081168721,
+                "p95_mm": 3.3929561329992426,
+                "mean_mm": 1.3538665545859905,
+                "count": 22008
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 6.415629081168721,
+                "p95_mm": 3.8591185879262,
+                "mean_mm": 1.5476819760307619,
+                "count": 12178
+              },
+              "deck_side_shortfall": {
+                "max_mm": 4.82458622921403,
+                "p95_mm": 2.5944183859327508,
+                "mean_mm": 1.1137562593312165,
+                "count": 9830
+              },
+              "signed_min_mm": -6.415629081168721,
+              "signed_max_mm": 4.82458622921403
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1952.1366471111191,
+                  317.9369039729854
+                ],
+                "end_mm": [
+                  2439.378599578727,
+                  344.3889755509162
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 487.9594576757486,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 051ea608-f646-4324-95bd-b559b7755c84[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  2439.378599578727,
+                  344.3889755509162
+                ],
+                "end_mm": [
+                  2504.668785915577,
+                  295.37685300227014
+                ],
+                "center_mm": [
+                  2433.960316385935,
+                  269.0770719154526
+                ],
+                "radius_mm": 75.47385186517536,
+                "sweep_deg": -65.4824515464339,
+                "length_mm": 86.25788652819745,
+                "bulge": -0.29375875897146336,
+                "source": "USER_CAM::PANEL_1 object 690f8075-d8fd-4a88-8615-45d4e3d74144"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  2504.668785915577,
+                  295.37685300227014
+                ],
+                "end_mm": [
+                  2522.703741629354,
+                  69.06732148654908
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 227.02701090941372,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object be785ca9-4170-4904-9622-eb9d12e3b977[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  2522.703741629354,
+                  69.06732148654908
+                ],
+                "end_mm": [
+                  2451.2123278053778,
+                  -1.8256126669940613
+                ],
+                "center_mm": [
+                  2431.282718548992,
+                  89.42801485573102
+                ],
+                "radius_mm": 93.53272771696666,
+                "sweep_deg": -65.12453468102271,
+                "length_mm": 106.31281085238452,
+                "bulge": -0.29206306231783835,
+                "source": "USER_CAM::PANEL_1 object 6ce7df88-62d1-43f9-83f5-ccf06fc4a447"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  2451.2123278053778,
+                  -1.8256126669940613
+                ],
+                "end_mm": [
+                  1960.0754162126013,
+                  -47.45224998351303
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 493.25171663330667,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 7f7148dd-31b5-4b9d-a230-079ae78c246b[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1960.0754162126013,
+                  -47.45224998351303
+                ],
+                "end_mm": [
+                  1822.6412178326566,
+                  -145.57942999838164
+                ],
+                "center_mm": [
+                  1982.0001157633965,
+                  -223.2714006422098
+                ],
+                "radius_mm": 177.23481743671772,
+                "sweep_deg": 56.901348937826604,
+                "length_mm": 176.01471306618646,
+                "bulge": 0.2535094864613692,
+                "source": "USER_CAM::PANEL_1 object 6f3dbf7c-d5c5-4b6c-911c-fc6ebd195c42"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1822.6412178326566,
+                  -145.57942999838164
+                ],
+                "end_mm": [
+                  1697.7515957608846,
+                  -500.5078989617107
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 376.260064027373,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 29b178a6-9745-4c62-a7dd-90c28992573e[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1697.7515957608846,
+                  -500.5078989617107
+                ],
+                "end_mm": [
+                  1562.605562939263,
+                  -647.4356158492778
+                ],
+                "center_mm": [
+                  1458.9407240338776,
+                  -416.5384275414558
+                ],
+                "radius_mm": 253.1219212845782,
+                "sweep_deg": -46.44913525055344,
+                "length_mm": 205.203497649295,
+                "bulge": -0.2054939567587363,
+                "source": "USER_CAM::PANEL_1 object a7e166ca-9f63-4150-bcc4-af29d2aa01ae"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1562.605562939263,
+                  -647.4356158492778
+                ],
+                "end_mm": [
+                  1050.3815376469497,
+                  -793.593961251265
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 532.6684841599953,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object db01528a-8524-46a0-b6b2-accea430674c[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1050.3815376469497,
+                  -793.593961251265
+                ],
+                "end_mm": [
+                  1033.0487824664556,
+                  -819.2137684067154
+                ],
+                "center_mm": [
+                  1054.1665632484196,
+                  -815.1700038745626
+                ],
+                "radius_mm": 21.70349160491645,
+                "sweep_deg": 90.89013774279626,
+                "length_mm": 34.42894674327745,
+                "bulge": 0.4187712582055279,
+                "source": "USER_CAM::PANEL_1 object 0c576c8e-a935-4444-839b-9ba0e9a44088"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1033.0487824664556,
+                  -819.2137684067154
+                ],
+                "end_mm": [
+                  612.3890529769548,
+                  -909.814617962954
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 430.305846990826,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 28f65a4d-625c-48b1-a3b9-d63fbccf73b3[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  612.3890529769548,
+                  -909.814617962954
+                ],
+                "end_mm": [
+                  -1226.6579007577366,
+                  -1095.6647741545203
+                ],
+                "center_mm": [
+                  -1159.1661170253835,
+                  7378.984746942982
+                ],
+                "radius_mm": 8475.459919425131,
+                "sweep_deg": -12.520537567179534,
+                "length_mm": 1852.0965282627328,
+                "bulge": -0.05468556616124483,
+                "source": "USER_CAM::PANEL_1 object bc308689-01ae-418b-9351-931d6ebc0c42"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -1226.6579007577366,
+                  -1095.6647741545203
+                ],
+                "end_mm": [
+                  -1343.2056984217647,
+                  -1022.5275559497157
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 137.59521004407253,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 8eaf1554-3422-402c-a48c-3d940fbf3024[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -1343.2056984217647,
+                  -1022.5275559497157
+                ],
+                "end_mm": [
+                  -1380.5481801748872,
+                  -600.621816372122
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 423.55508972505413,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object df14c9f6-ba13-44c0-bcf1-40378d800426[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  -1380.5481801748872,
+                  -600.621816372122
+                ],
+                "end_mm": [
+                  -1333.1153595416881,
+                  -521.0323014938039
+                ],
+                "center_mm": [
+                  -1394.1179820054895,
+                  -537.8993836284332
+                ],
+                "radius_mm": 63.73253695258302,
+                "sweep_deg": 93.24837699887038,
+                "length_mm": 103.72414309315656,
+                "bulge": 0.430918297752446,
+                "source": "USER_CAM::PANEL_1 object e0b1549e-6343-4e6b-bfea-cbb6b93bea01"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  -1333.1153595416881,
+                  -521.0323014938039
+                ],
+                "end_mm": [
+                  -1420.086033943578,
+                  -495.7695936266182
+                ],
+                "center_mm": [
+                  -1386.005815246875,
+                  -541.6797338679384
+                ],
+                "radius_mm": 56.977361248440346,
+                "sweep_deg": 105.26266927441155,
+                "length_mm": 104.67767755657852,
+                "bulge": 0.4945710688267966,
+                "source": "USER_CAM::PANEL_1 object 41200e82-0a5f-4e16-9540-88bad2637ecd"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -1420.086033943578,
+                  -495.7695936266182
+                ],
+                "end_mm": [
+                  -1495.729554164208,
+                  263.5626555394173
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 763.0906936760001,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object e5dfefaa-be55-4754-8b7e-73753086bace[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  -1495.729554164208,
+                  263.5626555394173
+                ],
+                "end_mm": [
+                  -1472.5532886583592,
+                  369.5449922147959
+                ],
+                "center_mm": [
+                  -1471.5445706623864,
+                  313.55006004135123
+                ],
+                "radius_mm": 55.76733785431301,
+                "sweep_deg": 206.85073805596554,
+                "length_mm": 201.33271756861484,
+                "bulge": 1.2667961205235327,
+                "source": "USER_CAM::PANEL_1 object 8cfe9c64-e902-440d-b4dd-1786ba886989"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -1472.5532886583592,
+                  369.5449922147959
+                ],
+                "end_mm": [
+                  -1525.3263675505864,
+                  798.6297173858675
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 432.3178220139661,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 17d2eda1-5a1b-42a7-8b14-1b6e3df911f5[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  -1525.3263675505864,
+                  798.6297173858675
+                ],
+                "end_mm": [
+                  -1438.9510779216516,
+                  875.0028801883167
+                ],
+                "center_mm": [
+                  -1925.9626366583589,
+                  1336.2911389762276
+                ],
+                "radius_mm": 670.655015914698,
+                "sweep_deg": 9.86231676565425,
+                "length_mm": 115.43978044517961,
+                "bulge": 0.0430590569735461,
+                "source": "USER_CAM::PANEL_1 object 5209e237-08df-496c-b61f-59b5a80b6324"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  -1438.9510779216516,
+                  875.0028801883167
+                ],
+                "end_mm": [
+                  -1409.797093397181,
+                  887.9077963595028
+                ],
+                "center_mm": [
+                  -1403.2435625818146,
+                  834.4958870294798
+                ],
+                "radius_mm": 53.905503692068734,
+                "sweep_deg": -34.40154462100355,
+                "length_mm": 32.365954461915514,
+                "bulge": -0.15124267477593367,
+                "source": "USER_CAM::PANEL_1 object 6608bc93-72f3-44f2-95ad-2d94f9c3c50a"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  -1409.797093397181,
+                  887.9077963595028
+                ],
+                "end_mm": [
+                  388.63140434345934,
+                  998.368878802301
+                ],
+                "center_mm": [
+                  -20.750173767186148,
+                  -7043.1904521723345
+                ],
+                "radius_mm": 8051.895444888725,
+                "sweep_deg": -12.84829995192351,
+                "length_mm": 1805.5984007309912,
+                "bulge": -0.056120089353675906,
+                "source": "USER_CAM::PANEL_1 object 37489628-799f-4c0e-8d92-4f03e15008d5"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  388.63140434345934,
+                  998.368878802301
+                ],
+                "end_mm": [
+                  865.8824589740227,
+                  957.6206532151971
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 478.9874602058831,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 196fd2e6-5f87-4001-a98f-7d622c003904[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  865.8824589740227,
+                  957.6206532151971
+                ],
+                "end_mm": [
+                  881.8939480977908,
+                  935.2164596125339
+                ],
+                "center_mm": [
+                  884.3082414445372,
+                  953.5940067644367
+                ],
+                "radius_mm": 18.698041654488726,
+                "sweep_deg": 94.84303950737596,
+                "length_mm": 30.951304239474055,
+                "bulge": 0.43919331063255046,
+                "source": "USER_CAM::PANEL_1 object 8861513e-3b4c-45a9-9f81-351871d5d720"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  881.8939480977908,
+                  935.2164596125339
+                ],
+                "end_mm": [
+                  1409.7929056656367,
+                  852.3862308693276
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 534.3577043468824,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 66d58f0a-af2f-48f8-b6fc-cbcaa71a1e34[0]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1409.7929056656367,
+                  852.3862308693276
+                ],
+                "end_mm": [
+                  1583.5196854019885,
+                  748.9573921047918
+                ],
+                "center_mm": [
+                  1386.494942549201,
+                  614.3474404048327
+                ],
+                "radius_mm": 238.89714678934462,
+                "sweep_deg": -50.06858578034142,
+                "length_mm": 208.76306053171007,
+                "bulge": -0.2220086536873063,
+                "source": "USER_CAM::PANEL_1 object 77056d25-3ce3-4b61-94aa-99044fc233a1"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1583.5196854019885,
+                  748.9573921047918
+                ],
+                "end_mm": [
+                  1611.0447821276593,
+                  712.9099407711951
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 45.3547097599087,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object f2706556-19de-45eb-9867-adb227f8f9aa[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1611.0447821276593,
+                  712.9099407711951
+                ],
+                "end_mm": [
+                  1764.68600541078,
+                  428.22774855865487
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 323.49586713723477,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 924f708b-6af8-4104-bfe7-970c286c79f7[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1764.68600541078,
+                  428.22774855865487
+                ],
+                "end_mm": [
+                  1794.5622063702176,
+                  384.64805365546
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 52.8372708570783,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 924f708b-6af8-4104-bfe7-970c286c79f7[1]"
+              },
+              {
+                "kind": "ARC",
+                "start_mm": [
+                  1794.5622063702176,
+                  384.64805365546
+                ],
+                "end_mm": [
+                  1938.6175714162343,
+                  317.81400062898354
+                ],
+                "center_mm": [
+                  1928.8710010592079,
+                  485.8907421076929
+                ],
+                "radius_mm": 168.2761230615034,
+                "sweep_deg": 56.30961480346262,
+                "length_mm": 165.37978452758074,
+                "bulge": 0.25076341767240695,
+                "source": "USER_CAM::PANEL_1 object 26921a27-6eae-4553-b0ae-5da2a3d4749c"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  1938.6175714162343,
+                  317.81400062898354
+                ],
+                "end_mm": [
+                  1952.1366471111191,
+                  317.9369039729854
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": -0.0,
+                "length_mm": 13.519634346978172,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 88f08710-b2fd-4908-9b09-01aa5e0a2a90[0]"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  2439.378599578727,
+                  344.3889755509162
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 7.222533409092242,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  2504.668785915577,
+                  295.37685300227014
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 15.846157858042554,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  2522.703741629354,
+                  69.06732148654908
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 17.111986779685147,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 3,
+                "point_mm": [
+                  2451.2123278053778,
+                  -1.8256126669940613
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 7.012292215701313,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 4,
+                "point_mm": [
+                  1960.0754162126013,
+                  -47.45224998351303
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 1.8005617000574856,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "near_tangent"
+              },
+              {
+                "index": 5,
+                "point_mm": [
+                  1822.6412178326566,
+                  -145.57942999838164
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 6.604966907248247,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 6,
+                "point_mm": [
+                  1697.7515957608846,
+                  -500.5078989617107
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 0.013139900974441624,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "tangent"
+              },
+              {
+                "index": 7,
+                "point_mm": [
+                  1562.605562939263,
+                  -647.4356158492778
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 8.252825625379437,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 8,
+                "point_mm": [
+                  1050.3815376469497,
+                  -793.593961251265
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 5.975607395792959,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 9,
+                "point_mm": [
+                  1033.0487824664556,
+                  -819.2137684067154
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 88.68555391312835,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 10,
+                "point_mm": [
+                  612.3890529769548,
+                  -909.814617962954
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 0.09033342749711797,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "tangent"
+              },
+              {
+                "index": 11,
+                "point_mm": [
+                  -1226.6579007577366,
+                  -1095.6647741545203
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 31.653205148039056,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 12,
+                "point_mm": [
+                  -1343.2056984217647,
+                  -1022.5275559497157
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 52.83248777946742,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 13,
+                "point_mm": [
+                  -1380.5481801748872,
+                  -600.621816372122
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 82.85039536660678,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "marked_corner"
+              },
+              {
+                "index": 14,
+                "point_mm": [
+                  -1333.1153595416881,
+                  -521.0323014938039
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 5.868735135907192,
+                "before": "ARC",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 15,
+                "point_mm": [
+                  -1420.086033943578,
+                  -495.7695936266182
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 120.89845242353016,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 16,
+                "point_mm": [
+                  -1495.729554164208,
+                  263.5626555394173
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 121.507646585993,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "marked_corner"
+              },
+              {
+                "index": 17,
+                "point_mm": [
+                  -1472.5532886583592,
+                  369.5449922147959
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 84.02045150282402,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 18,
+                "point_mm": [
+                  -1525.3263675505864,
+                  798.6297173858675
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 60.32009836170719,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "marked_corner"
+              },
+              {
+                "index": 19,
+                "point_mm": [
+                  -1438.9510779216516,
+                  875.0028801883167
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 5.157152505196452,
+                "before": "ARC",
+                "after": "ARC",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 20,
+                "point_mm": [
+                  -1409.797093397181,
+                  887.9077963595028
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 2.9388787370660547,
+                "before": "ARC",
+                "after": "ARC",
+                "class": "near_tangent"
+              },
+              {
+                "index": 21,
+                "point_mm": [
+                  388.63140434345934,
+                  998.368878802301
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 1.9658306542939337,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "near_tangent"
+              },
+              {
+                "index": 22,
+                "point_mm": [
+                  865.8824589740227,
+                  957.6206532151971
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 97.44709429015529,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "marked_corner"
+              },
+              {
+                "index": 23,
+                "point_mm": [
+                  881.8939480977908,
+                  935.2164596125339
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 1.4331190889395387,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "near_tangent"
+              },
+              {
+                "index": 24,
+                "point_mm": [
+                  1409.7929056656367,
+                  852.3862308693276
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 3.327315559673078,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "near_tangent"
+              },
+              {
+                "index": 25,
+                "point_mm": [
+                  1583.5196854019885,
+                  748.9573921047918
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 3.0231990287357746,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "near_tangent"
+              },
+              {
+                "index": 26,
+                "point_mm": [
+                  1611.0447821276593,
+                  712.9099407711951
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 9.009150402878946,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 27,
+                "point_mm": [
+                  1764.68600541078,
+                  428.22774855865487
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 6.077249746707098,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "unmarked_corner"
+              },
+              {
+                "index": 28,
+                "point_mm": [
+                  1794.5622063702176,
+                  384.64805365546
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 2.5764699967804736,
+                "before": "LINE",
+                "after": "ARC",
+                "class": "near_tangent"
+              },
+              {
+                "index": 29,
+                "point_mm": [
+                  1938.6175714162343,
+                  317.81400062898354
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 2.7979297743460707,
+                "before": "ARC",
+                "after": "LINE",
+                "class": "near_tangent"
+              },
+              {
+                "index": 30,
+                "point_mm": [
+                  1952.1366471111191,
+                  317.9369039729854
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 2.586635107215629,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "near_tangent"
+              }
+            ]
+          },
+          {
+            "index": 5,
+            "closed": true,
+            "reference": "RAW obstacle 6",
+            "side": "obstacle",
+            "primitive_count": 4,
+            "line_count": 4,
+            "arc_count": 0,
+            "total_length_mm": 337.5277056176129,
+            "primitives_per_metre": 11.850879004675317,
+            "join_classes": {
+              "marked_corner": 4,
+              "tangent": 0,
+              "near_tangent": 0,
+              "unmarked_corner": 0
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 5.9894954217045475,
+                "p95_mm": 5.491912236469001,
+                "mean_mm": 2.058105296324593,
+                "count": 682
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 3.8562562441053263,
+                "p95_mm": 3.844711512976544,
+                "mean_mm": 2.816724799238164,
+                "count": 209
+              },
+              "deck_side_shortfall": {
+                "max_mm": 5.9894954217045475,
+                "p95_mm": 5.535839488025773,
+                "mean_mm": 1.7229013299209224,
+                "count": 473
+              },
+              "signed_min_mm": -3.8562562441053263,
+              "signed_max_mm": 5.9894954217045475
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -822.5900462707618,
+                  378.38559600537087
+                ],
+                "end_mm": [
+                  -716.9429695124339,
+                  378.38559600537087
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 105.6470767583279,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 658809d2-6b53-42fb-8514-afd4aee04615[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -716.9429695124339,
+                  378.38559600537087
+                ],
+                "end_mm": [
+                  -716.9429695124339,
+                  441.50237205584943
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 63.11677605047856,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 658809d2-6b53-42fb-8514-afd4aee04615[1]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -716.9429695124339,
+                  441.50237205584943
+                ],
+                "end_mm": [
+                  -822.5900462707618,
+                  441.50237205584943
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 105.6470767583279,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 658809d2-6b53-42fb-8514-afd4aee04615[2]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -822.5900462707618,
+                  441.50237205584943
+                ],
+                "end_mm": [
+                  -822.5900462707618,
+                  378.38559600537087
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 63.11677605047856,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 658809d2-6b53-42fb-8514-afd4aee04615[3]"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  -716.9429695124339,
+                  378.38559600537087
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  -716.9429695124339,
+                  441.50237205584943
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  -822.5900462707618,
+                  441.50237205584943
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 3,
+                "point_mm": [
+                  -822.5900462707618,
+                  378.38559600537087
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              }
+            ]
+          },
+          {
+            "index": 6,
+            "closed": true,
+            "reference": "RAW obstacle 5",
+            "side": "obstacle",
+            "primitive_count": 4,
+            "line_count": 4,
+            "arc_count": 0,
+            "total_length_mm": 342.05220569291623,
+            "primitives_per_metre": 11.694121345883309,
+            "join_classes": {
+              "marked_corner": 4,
+              "tangent": 0,
+              "near_tangent": 0,
+              "unmarked_corner": 0
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 7.305849381506131,
+                "p95_mm": 4.949331289386118,
+                "mean_mm": 1.5877422130724776,
+                "count": 690
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 1.5572281517276116,
+                "p95_mm": 1.2302452129087298,
+                "mean_mm": 0.33703736088567837,
+                "count": 181
+              },
+              "deck_side_shortfall": {
+                "max_mm": 7.305849381506131,
+                "p95_mm": 5.029509212257593,
+                "mean_mm": 2.032491875637921,
+                "count": 509
+              },
+              "signed_min_mm": -1.5572281517276116,
+              "signed_max_mm": 7.305849381506131
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -488.4557157096261,
+                  389.6968461936287
+                ],
+                "end_mm": [
+                  -383.7135389663587,
+                  389.6968461936287
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 104.74217674326735,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0598808d-d973-4252-b417-912d0311c7f1[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -383.7135389663587,
+                  389.6968461936287
+                ],
+                "end_mm": [
+                  -383.7135389663587,
+                  455.98077229681945
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 66.28392610319077,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0598808d-d973-4252-b417-912d0311c7f1[1]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -383.7135389663587,
+                  455.98077229681945
+                ],
+                "end_mm": [
+                  -488.4557157096261,
+                  455.98077229681945
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 104.74217674326735,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0598808d-d973-4252-b417-912d0311c7f1[2]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -488.4557157096261,
+                  455.98077229681945
+                ],
+                "end_mm": [
+                  -488.4557157096261,
+                  389.6968461936287
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 66.28392610319077,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0598808d-d973-4252-b417-912d0311c7f1[3]"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  -383.7135389663587,
+                  389.6968461936287
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  -383.7135389663587,
+                  455.98077229681945
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  -488.4557157096261,
+                  455.98077229681945
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 3,
+                "point_mm": [
+                  -488.4557157096261,
+                  389.6968461936287
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              }
+            ]
+          },
+          {
+            "index": 7,
+            "closed": true,
+            "reference": "RAW obstacle 3",
+            "side": "obstacle",
+            "primitive_count": 4,
+            "line_count": 4,
+            "arc_count": 0,
+            "total_length_mm": 346.3278582640778,
+            "primitives_per_metre": 11.54974947741561,
+            "join_classes": {
+              "marked_corner": 4,
+              "tangent": 0,
+              "near_tangent": 0,
+              "unmarked_corner": 0
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 7.114349605216087,
+                "p95_mm": 5.609289429410507,
+                "mean_mm": 2.047901953524927,
+                "count": 700
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 2.044531852521039,
+                "p95_mm": 2.0017053644802645,
+                "mean_mm": 1.6628922012601144,
+                "count": 304
+              },
+              "deck_side_shortfall": {
+                "max_mm": 7.114349605216087,
+                "p95_mm": 6.131001405618297,
+                "mean_mm": 2.3434649956676115,
+                "count": 396
+              },
+              "signed_min_mm": -2.044531852521039,
+              "signed_max_mm": 7.114349605216087
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -756.8888304966094,
+                  -549.2030519384696
+                ],
+                "end_mm": [
+                  -650.2418392216395,
+                  -549.2030519384696
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 106.64699127496999,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0778b96a-72eb-4388-9be4-61d3da40eb5d[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -650.2418392216395,
+                  -549.2030519384696
+                ],
+                "end_mm": [
+                  -650.2418392216395,
+                  -482.68611408140066
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 66.51693785706891,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0778b96a-72eb-4388-9be4-61d3da40eb5d[1]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -650.2418392216395,
+                  -482.68611408140066
+                ],
+                "end_mm": [
+                  -756.8888304966094,
+                  -482.68611408140066
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 106.64699127496999,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0778b96a-72eb-4388-9be4-61d3da40eb5d[2]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -756.8888304966094,
+                  -482.68611408140066
+                ],
+                "end_mm": [
+                  -756.8888304966094,
+                  -549.2030519384696
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 66.51693785706891,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 0778b96a-72eb-4388-9be4-61d3da40eb5d[3]"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  -650.2418392216395,
+                  -549.2030519384696
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  -650.2418392216395,
+                  -482.68611408140066
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  -756.8888304966094,
+                  -482.68611408140066
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 3,
+                "point_mm": [
+                  -756.8888304966094,
+                  -549.2030519384696
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              }
+            ]
+          },
+          {
+            "index": 8,
+            "closed": true,
+            "reference": "RAW obstacle 4",
+            "side": "obstacle",
+            "primitive_count": 4,
+            "line_count": 4,
+            "arc_count": 0,
+            "total_length_mm": 346.3278582640778,
+            "primitives_per_metre": 11.54974947741561,
+            "join_classes": {
+              "marked_corner": 4,
+              "tangent": 0,
+              "near_tangent": 0,
+              "unmarked_corner": 0
+            },
+            "max_gap_mm": 0.0,
+            "deviation": {
+              "absolute": {
+                "max_mm": 9.743804496850046,
+                "p95_mm": 6.87195853438827,
+                "mean_mm": 2.3570852987904405,
+                "count": 698
+              },
+              "forbidden_side_penetration": {
+                "max_mm": 0.9107093519649782,
+                "p95_mm": 0.8442647597297658,
+                "mean_mm": 0.3121610497693354,
+                "count": 67
+              },
+              "deck_side_shortfall": {
+                "max_mm": 9.743804496850046,
+                "p95_mm": 7.205431115817978,
+                "mean_mm": 2.574216716673822,
+                "count": 631
+              },
+              "signed_min_mm": -0.9107093519649782,
+              "signed_max_mm": 9.743804496850046
+            },
+            "segments": [
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -421.73874966856795,
+                  -509.0729985205685
+                ],
+                "end_mm": [
+                  -318.57336120154366,
+                  -509.0729985205685
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 103.16538846702429,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 989f242f-02fa-4fb1-9205-bac6a754c3e1[0]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -318.57336120154366,
+                  -509.0729985205685
+                ],
+                "end_mm": [
+                  -318.57336120154366,
+                  -439.0744578555539
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 69.99854066501462,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 989f242f-02fa-4fb1-9205-bac6a754c3e1[1]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -318.57336120154366,
+                  -439.0744578555539
+                ],
+                "end_mm": [
+                  -421.73874966856795,
+                  -439.0744578555539
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 103.16538846702429,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 989f242f-02fa-4fb1-9205-bac6a754c3e1[2]"
+              },
+              {
+                "kind": "LINE",
+                "start_mm": [
+                  -421.73874966856795,
+                  -439.0744578555539
+                ],
+                "end_mm": [
+                  -421.73874966856795,
+                  -509.0729985205685
+                ],
+                "center_mm": null,
+                "radius_mm": 0.0,
+                "sweep_deg": 0.0,
+                "length_mm": 69.99854066501462,
+                "bulge": 0.0,
+                "source": "USER_CAM::PANEL_1 object 989f242f-02fa-4fb1-9205-bac6a754c3e1[3]"
+              }
+            ],
+            "joins": [
+              {
+                "index": 0,
+                "point_mm": [
+                  -318.57336120154366,
+                  -509.0729985205685
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 1,
+                "point_mm": [
+                  -318.57336120154366,
+                  -439.0744578555539
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 2,
+                "point_mm": [
+                  -421.73874966856795,
+                  -439.0744578555539
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              },
+              {
+                "index": 3,
+                "point_mm": [
+                  -421.73874966856795,
+                  -509.0729985205685
+                ],
+                "gap_mm": 0.0,
+                "tangent_mismatch_deg": 90.0,
+                "before": "LINE",
+                "after": "LINE",
+                "class": "marked_corner"
+              }
+            ]
+          }
+        ],
+        "training_summary": {
+          "primitives": 60,
+          "lines": 38,
+          "arcs": 22,
+          "total_drawn_length_m": 16.61403378269144,
+          "primitives_per_metre": 3.6114047187329192,
+          "line_length_mm": {
+            "min": 13.519634346978172,
+            "median": 122.12110065952126,
+            "max": 883.6026289340374
+          },
+          "arc_length_mm": {
+            "min": 30.951304239474055,
+            "median": 119.44071182351715,
+            "max": 1852.0965282627328
+          },
+          "arc_radius_mm": {
+            "min": 18.698041654488726,
+            "p25": 56.06984370284485,
+            "median": 172.75547024911054,
+            "p75": 367.2668006608434,
+            "max": 8475.459919425131
+          },
+          "arc_sweep_deg": {
+            "min": 3.887118935900686,
+            "median": 61.01294180942466,
+            "max": 206.85073805596554
+          },
+          "joins": {
+            "marked_corner": 25,
+            "tangent": 2,
+            "near_tangent": 13,
+            "unmarked_corner": 16,
+            "near_tangent_mismatch_deg_median": 2.586635107215629,
+            "near_tangent_mismatch_deg_max": 4.543687965928481,
+            "marked_corner_angle_deg_median": 90.0
+          },
+          "signed_deviation_mm": {
+            "mean": -0.08429183957908412,
+            "median": -0.08459667548932073,
+            "p5": -3.3649933977300654,
+            "p95": 3.386083437360365,
+            "min": -7.305295210436545,
+            "max": 9.808873451639297,
+            "fraction_beyond_boundary": 0.5192745121513229,
+            "fraction_beyond_boundary_2mm": 0.16622770262181252,
+            "fraction_inside_5mm": 0.019454088351490484
+          },
+          "corner_markers_total": 33
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "panel_id": 1,
+      "role": "primary",
+      "problems": [
+        "gap: open end at [1822.52, -145.88] mm (USER_CAM::PANEL_1 object 29b178a6-9745-4c62-a7dd-90c28992573e[0]); nearest other open end is 0.64 mm away",
+        "gap: open end at [1562.92, -647.26] mm (USER_CAM::PANEL_1 object db01528a-8524-46a0-b6b2-accea430674c[0]); nearest other open end is 0.72 mm away",
+        "gap: open end at [1033.44, -819.12] mm (USER_CAM::PANEL_1 object 28f65a4d-625c-48b1-a3b9-d63fbccf73b3[0]); nearest other open end is 0.81 mm away",
+        "gap: open end at [611.92, -909.71] mm (USER_CAM::PANEL_1 object 28f65a4d-625c-48b1-a3b9-d63fbccf73b3[0]); nearest other open end is 0.96 mm away",
+        "gap: open end at [1032.66, -819.31] mm (USER_CAM::PANEL_1 object 0c576c8e-a935-4444-839b-9ba0e9a44088); nearest other open end is 0.81 mm away",
+        "gap: open end at [1562.29, -647.61] mm (USER_CAM::PANEL_1 object a7e166ca-9f63-4150-bcc4-af29d2aa01ae); nearest other open end is 0.72 mm away",
+        "gap: open end at [1822.76, -145.28] mm (USER_CAM::PANEL_1 object 6f3dbf7c-d5c5-4b6c-911c-fc6ebd195c42); nearest other open end is 0.64 mm away",
+        "gap: open end at [1939.14, 318.04] mm (USER_CAM::PANEL_1 object 26921a27-6eae-4553-b0ae-5da2a3d4749c); nearest other open end is 1.13 mm away",
+        "gap: open end at [1938.1, 317.59] mm (USER_CAM::PANEL_1 object 88f08710-b2fd-4908-9b09-01aa5e0a2a90[0]); nearest other open end is 1.13 mm away",
+        "gap: open end at [1408.57, 852.7] mm (USER_CAM::PANEL_1 object 66d58f0a-af2f-48f8-b6fc-cbcaa71a1e34[0]); nearest other open end is 2.52 mm away",
+        "gap: open end at [1582.74, 749.46] mm (USER_CAM::PANEL_1 object f2706556-19de-45eb-9867-adb227f8f9aa[0]); nearest other open end is 1.85 mm away",
+        "gap: open end at [1411.01, 852.07] mm (USER_CAM::PANEL_1 object 77056d25-3ce3-4b61-94aa-99044fc233a1); nearest other open end is 2.52 mm away",
+        "gap: open end at [1584.3, 748.46] mm (USER_CAM::PANEL_1 object 77056d25-3ce3-4b61-94aa-99044fc233a1); nearest other open end is 1.85 mm away",
+        "gap: open end at [866.16, 957.76] mm (USER_CAM::PANEL_1 object 8861513e-3b4c-45a9-9f81-351871d5d720); nearest other open end is 0.61 mm away",
+        "gap: open end at [865.61, 957.48] mm (USER_CAM::PANEL_1 object 196fd2e6-5f87-4001-a98f-7d622c003904[0]); nearest other open end is 0.61 mm away",
+        "gap: open end at [-1495.28, 263.41] mm (USER_CAM::PANEL_1 object e5dfefaa-be55-4754-8b7e-73753086bace[0]); nearest other open end is 0.95 mm away",
+        "gap: open end at [-1420.07, -495.5] mm (USER_CAM::PANEL_1 object e5dfefaa-be55-4754-8b7e-73753086bace[0]); nearest other open end is 0.53 mm away",
+        "gap: open end at [-1227.3, -1094.38] mm (USER_CAM::PANEL_1 object 8eaf1554-3422-402c-a48c-3d940fbf3024[0]); nearest other open end is 2.87 mm away",
+        "gap: open end at [-1380.81, -601.82] mm (USER_CAM::PANEL_1 object df14c9f6-ba13-44c0-bcf1-40378d800426[0]); nearest other open end is 2.46 mm away",
+        "gap: open end at [-1472.45, 369.96] mm (USER_CAM::PANEL_1 object 17d2eda1-5a1b-42a7-8b14-1b6e3df911f5[0]); nearest other open end is 0.85 mm away",
+        "gap: open end at [-1438.77, 875.36] mm (USER_CAM::PANEL_1 object 5209e237-08df-496c-b61f-59b5a80b6324); nearest other open end is 0.81 mm away",
+        "gap: open end at [-1439.13, 874.64] mm (USER_CAM::PANEL_1 object 6608bc93-72f3-44f2-95ad-2d94f9c3c50a); nearest other open end is 0.81 mm away",
+        "gap: open end at [-1409.44, 887.99] mm (USER_CAM::PANEL_1 object 6608bc93-72f3-44f2-95ad-2d94f9c3c50a); nearest other open end is 0.74 mm away",
+        "gap: open end at [-1410.16, 887.83] mm (USER_CAM::PANEL_1 object 37489628-799f-4c0e-8d92-4f03e15008d5); nearest other open end is 0.74 mm away",
+        "gap: open end at [-1496.18, 263.71] mm (USER_CAM::PANEL_1 object 8cfe9c64-e902-440d-b4dd-1786ba886989); nearest other open end is 0.95 mm away",
+        "gap: open end at [-1472.65, 369.13] mm (USER_CAM::PANEL_1 object 8cfe9c64-e902-440d-b4dd-1786ba886989); nearest other open end is 0.85 mm away",
+        "gap: open end at [-1420.1, -496.03] mm (USER_CAM::PANEL_1 object 41200e82-0a5f-4e16-9540-88bad2637ecd); nearest other open end is 0.53 mm away",
+        "gap: open end at [-1332.78, -521.37] mm (USER_CAM::PANEL_1 object 41200e82-0a5f-4e16-9540-88bad2637ecd); nearest other open end is 0.96 mm away",
+        "gap: open end at [-1380.28, -599.42] mm (USER_CAM::PANEL_1 object e0b1549e-6343-4e6b-bfea-cbb6b93bea01); nearest other open end is 2.46 mm away",
+        "gap: open end at [-1333.45, -520.69] mm (USER_CAM::PANEL_1 object e0b1549e-6343-4e6b-bfea-cbb6b93bea01); nearest other open end is 0.96 mm away",
+        "gap: open end at [-1226.01, -1096.95] mm (USER_CAM::PANEL_1 object bc308689-01ae-418b-9351-931d6ebc0c42); nearest other open end is 2.87 mm away",
+        "gap: open end at [612.86, -909.91] mm (USER_CAM::PANEL_1 object bc308689-01ae-418b-9351-931d6ebc0c42); nearest other open end is 0.96 mm away",
+        "gap: open end at [6.37, 442.87] mm (USER_CAM::PANEL_1 object 91f9b1be-868c-485f-a158-d940f3e912c8[0]); nearest other open end is 0.71 mm away",
+        "gap: open end at [247.55, 483.44] mm (USER_CAM::PANEL_1 object d8bc74d7-470e-4eca-a4ac-fe45522bd6e9[0]); nearest other open end is 71.03 mm away",
+        "gap: open end at [318.29, 489.86] mm (USER_CAM::PANEL_1 object f8d01c85-6d0c-4277-b2b9-4827d3d834a4[0]); nearest other open end is 71.03 mm away",
+        "gap: open end at [1008.74, 532.43] mm (USER_CAM::PANEL_1 object f8d01c85-6d0c-4277-b2b9-4827d3d834a4[0]); nearest other open end is 0.58 mm away",
+        "gap: open end at [1510.47, 300.83] mm (USER_CAM::PANEL_1 object 6a76e55c-8d59-4865-acd3-3fa200e7b569[0]); nearest other open end is 1.03 mm away",
+        "gap: open end at [320.91, -448.84] mm (USER_CAM::PANEL_1 object 0550dfa4-421a-41cf-895e-881abdf7f27a[0]); nearest other open end is 73.20 mm away",
+        "gap: open end at [392.69, -434.46] mm (USER_CAM::PANEL_1 object b730bfa9-37d7-4d37-8b51-e6dc1d777b03[0]); nearest other open end is 73.20 mm away",
+        "gap: open end at [1109.96, -382.95] mm (USER_CAM::PANEL_1 object b730bfa9-37d7-4d37-8b51-e6dc1d777b03[0]); nearest other open end is 0.67 mm away",
+        "gap: open end at [1109.42, -383.35] mm (USER_CAM::PANEL_1 object bb40eef9-62df-4f1f-b154-ebaec4b284cf); nearest other open end is 0.67 mm away",
+        "gap: open end at [1230.61, -360.99] mm (USER_CAM::PANEL_1 object bb40eef9-62df-4f1f-b154-ebaec4b284cf); nearest other open end is 47.59 mm away",
+        "gap: open end at [1376.14, -318.77] mm (USER_CAM::PANEL_1 object 2794104d-59ea-406a-9cfa-a7a2ade44418); nearest other open end is 0.82 mm away",
+        "gap: open end at [1276.37, -347.95] mm (USER_CAM::PANEL_1 object c0702744-766f-4c8a-9add-211d10ec93ad); nearest other open end is 47.59 mm away",
+        "gap: open end at [1376.59, -318.09] mm (USER_CAM::PANEL_1 object c0702744-766f-4c8a-9add-211d10ec93ad); nearest other open end is 0.82 mm away",
+        "gap: open end at [1510.31, 299.81] mm (USER_CAM::PANEL_1 object f1a06b2d-df9c-49b6-a92e-817e9be0fc61); nearest other open end is 1.03 mm away",
+        "gap: open end at [1236.2, 505.31] mm (USER_CAM::PANEL_1 object f1a06b2d-df9c-49b6-a92e-817e9be0fc61); nearest other open end is 65.51 mm away",
+        "gap: open end at [1008.49, 531.91] mm (USER_CAM::PANEL_1 object 2909da30-6eec-49ea-8e57-6b3f273675a5); nearest other open end is 0.58 mm away",
+        "gap: open end at [1170.89, 510.53] mm (USER_CAM::PANEL_1 object 2909da30-6eec-49ea-8e57-6b3f273675a5); nearest other open end is 65.51 mm away",
+        "gap: open end at [6.4, 442.16] mm (USER_CAM::PANEL_1 object 997a1c96-95ab-4f6b-bf10-ed5bfe5a5d5c); nearest other open end is 0.71 mm away"
+      ],
+      "loops": [],
+      "valid": false
+    }
+  ],
+  "panels_without_drawing": [
+    2,
+    3,
+    4,
+    5
+  ]
+}

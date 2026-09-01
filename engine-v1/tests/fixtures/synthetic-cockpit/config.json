@@ -1,0 +1,8 @@
+{
+  "markers": {
+    "paper_suppression_radius_mm": 25.0
+  },
+  "segmentation": {
+    "minimum_candidate_area_mm2": 100.0
+  }
+}

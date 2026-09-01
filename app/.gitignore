@@ -1,0 +1,7 @@
+.venv/
+cache/
+inputs/*
+!inputs/README.md
+__pycache__/
+*.egg-info/
+.DS_Store

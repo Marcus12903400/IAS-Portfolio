@@ -1,0 +1,42 @@
+# Shared Python environment, rebuilt by the launcher on first run
+.venv/
+venv/
+*.egg-info/
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Disposable, always-safe-to-delete caches
+cache/
+app/cache/
+engine/cache/
+engine-v1/cache/
+
+# Generated run output
+engine/outputs/runs/*
+!engine/outputs/runs/.gitkeep
+engine-v1/outputs/runs/*
+!engine-v1/outputs/runs/.gitkeep
+
+# Boat scans: large binaries, not ordinary git content
+app/inputs/*
+!app/inputs/README.md
+engine/inputs/boats/*
+!engine/inputs/boats/README.md
+engine-v1/inputs/boats/*
+!engine-v1/inputs/boats/README.md
+
+# Optional local config overrides
+config/local.yaml
+engine/config/local.yaml
+engine-v1/config/local.yaml
+
+# OS junk
+.DS_Store
+._*
+Thumbs.db
+desktop.ini

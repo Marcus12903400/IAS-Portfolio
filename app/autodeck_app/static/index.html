@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoDeck 0.4.2</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">AutoDeck <span>0.4.2</span></div>
+  <div id="status-bar" class="status">Ready</div>
+</header>
+
+<div id="layout">
+  <aside id="left">
+    <section>
+      <h2>1 · Scan</h2>
+      <div id="dropzone">
+        Drop an <b>.obj</b> scan here<br>or <label class="link">choose a file<input type="file" id="file-input" accept=".obj"></label>
+      </div>
+      <button id="btn-pick" class="secondary">Browse on this computer…</button>
+      <div id="scan-info" class="info muted">No scan loaded</div>
+    </section>
+
+    <section>
+      <h2>2 · Outline</h2>
+      <div class="row">
+        <label>Units <select id="opt-units">
+          <option value="auto">auto</option><option value="mm">mm</option><option value="cm">cm</option>
+          <option value="m">m</option><option value="in">in</option></select></label>
+        <label>Layout <select id="opt-layout">
+          <option value="nest">nest</option><option value="boat-plan">boat-plan</option></select></label>
+      </div>
+      <div class="row">
+        <label>Pattern <select id="opt-pattern">
+          <option value="teak">Teak lines</option>
+          <option value="diamond">Diamond stitch</option>
+          <option value="hex">Hexagons</option>
+          <option value="none">None</option></select></label>
+        <label>Size <input type="number" id="opt-pattern-size" min="10" max="1000" step="0.5" value="63.5" style="width:70px"> mm</label>
+      </div>
+      <div class="hint" id="pattern-hint">Teak: spacing on centre.</div>
+      <button id="btn-outline" disabled>Run outline</button>
+      <div class="hint">Finds the deck, truly unrolls each panel (angled panels keep their real size — nothing is squashed onto a flat plane) and draws the raw wall line, obstacles, seams and the pattern. A new scan takes a few minutes; it is cached afterwards.</div>
+    </section>
+
+    <section>
+      <h2>3 · Auto-fit</h2>
+      <button id="btn-autofit" disabled>Run auto-fit</button>
+      <div class="hint">Straight lines first, then the biggest tangent arcs that fit. The outline is kept 1.5 mm inside the detected border and only ever simplifies inward — slightly small fits the boat, slightly big does not. Writes final_auto.dxf.</div>
+      <h3>Ingest a drawn .3dm</h3>
+      <div class="row">
+        <input type="file" id="ingest-input" accept=".3dm">
+        <button id="btn-ingest" class="secondary" disabled>Ingest</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>4 · Files</h2>
+      <div id="files" class="info muted">Open or make a run first</div>
+    </section>
+
+    <section>
+      <h2>Previous runs</h2>
+      <div id="runs" class="runs"></div>
+    </section>
+  </aside>
+
+  <main id="center">
+    <div id="tabs">
+      <button data-tab="3d" class="active">3D over the mesh</button>
+      <button data-tab="flat">Flat layout</button>
+    </div>
+    <div id="view3d">
+      <canvas id="gl"></canvas>
+      <div id="view3d-empty" class="empty">Load a scan to see it here</div>
+    </div>
+    <div id="viewflat" hidden>
+      <svg id="flat" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="flat-empty" class="empty">Run the outline to see the flat panels</div>
+    </div>
+  </main>
+
+  <aside id="right">
+    <section>
+      <h2>Layers</h2>
+      <div id="layers" class="muted">No run open</div>
+      <label class="check">Shading <select id="opt-shading">
+        <option value="smooth">Smooth</option>
+        <option value="flat">Flat (facets)</option>
+        <option value="slope">Slope — walls dark</option>
+        <option value="height">Height colors</option>
+      </select></label>
+      <label class="check">Light angle <input type="range" id="opt-light" min="0" max="360" step="5" value="45"></label>
+      <label class="check">Light height <input type="range" id="opt-light-el" min="10" max="80" step="5" value="35"></label>
+      <label class="check"><input type="checkbox" id="opt-xray"> Show lines through the mesh</label>
+      <label class="check">Mesh opacity <input type="range" id="opt-opacity" min="0.15" max="1" step="0.05" value="1"></label>
+      <button id="btn-fit" class="secondary">Fit view</button>
+      <div class="hint">Flat shading with a low light height rakes the surface so creases and dents show; Slope darkens the walls; Height colors by elevation.</div>
+    </section>
+    <section>
+      <h2>Panels · flattening</h2>
+      <div id="panel-quality" class="info muted">No run open</div>
+    </section>
+    <section id="log-section">
+      <h2>Progress</h2>
+      <pre id="log"></pre>
+    </section>
+  </aside>
+</div>
+
+<script src="/static/vendor/three.min.js"></script>
+<script src="/static/vendor/OrbitControls.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

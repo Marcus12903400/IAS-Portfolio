@@ -1,0 +1,28 @@
+# Environment (regenerable -- see .python-version and pyproject.toml)
+.venv/
+venv/
+*.egg-info/
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Disposable, always-safe-to-delete cache (see cache/README.md)
+cache/*
+!cache/README.md
+
+# Generated run output (see outputs/README.md)
+outputs/runs/*
+!outputs/runs/.gitkeep
+
+# Real boat scans: large binaries, not ordinary git content (see inputs/README.md)
+inputs/boats/*
+!inputs/boats/README.md
+
+# Optional local config override (see docs/CONFIG_REFERENCE.md)
+config/local.yaml
+
+.DS_Store

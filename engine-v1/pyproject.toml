@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autodeck"
+version = "0.3.6"
+description = "Explainable, geometry-first marine decking region proposals"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy>=1.26,<3",
+  "Pillow>=10",
+  "scipy>=1.13,<2",
+  "ezdxf==1.4.4",
+  "libigl==2.6.1",
+  "shapely==2.1.1",
+]
+
+[project.optional-dependencies]
+markers = ["opencv-contrib-python>=4.9"]
+rhino = ["rhino3dm>=8.0"]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+autodeck = "autodeck.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
