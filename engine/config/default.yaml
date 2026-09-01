@@ -15,6 +15,20 @@
     "cpu_fraction": 0.5,
     "max_workers": 0
   },
+  "sheets": {
+    "sheet_width_mm": 1016.0,
+    "sheet_length_mm": 2032.0,
+    "max_part_width_mm": 990.6,
+    "max_part_length_mm": 2006.6,
+    "seam_gap_mm": 6.0,
+    "part_spacing_mm": 20.0,
+    "sample_step_mm": 1.0,
+    "arc_rebuild_tolerance_mm": 0.05,
+    "min_piece_area_mm2": 400.0,
+    "nest_step_mm": 5.0,
+    "allow_180_rotation": true,
+    "grain_angle_deg": null
+  },
   "layout": {
     "mode": "nest",
     "nest_gap_mm": 150.0,
