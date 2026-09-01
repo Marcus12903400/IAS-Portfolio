@@ -20,9 +20,11 @@ New in v5:
   the grain along the boat (0° or 180° rotation only), a minimum piece gap you
   can set, and one `sheet_NN.dxf` per sheet for VCarve.
 - **Faster.** A cold run of the 807 MB Key West scan went from 781.7 s to
-  460.4 s, mostly from vectorising the curvature stage (223.6 s → 8.8 s) and the
-  OBJ statistics (142.5 s → 50.6 s). AutoDeck now uses about half the machine's
-  logical CPUs by default instead of exactly one core.
+  317.0 s (2.47×), mostly from vectorising the curvature stage (223.6 s → 8.4 s),
+  building each panel's search tree once instead of once per curve
+  (69.5 s → 1.7 s) and vectorising the OBJ statistics (142.5 s → 52.4 s). The
+  output geometry is byte-identical throughout. AutoDeck now uses about half the
+  machine's logical CPUs by default instead of exactly one core.
 
 From v0.4.2:
 
