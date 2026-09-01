@@ -56,6 +56,56 @@ def boat_axis(run_dir: Path) -> tuple[np.ndarray | None, float]:
     return np.asarray(axis, dtype=float)[:2], float(frame.get("axis_confidence", 0.0))
 
 
+def resolve_axis(run_dir: Path, options: dict[str, Any]) -> tuple[np.ndarray | None, float, list[str]]:
+    """The grain direction this job will actually use, and what to warn about.
+
+    Both `plan` and `preview` go through here.  They used to resolve the axis
+    separately, and `preview` ignored the manual override -- so the placements
+    were computed in the override frame while the picture was drawn in the
+    detected frame, and pieces appeared outside the sheet.  That bit exactly
+    when the user was told to override, i.e. when detection was unsure.
+    """
+
+    axis, confidence = boat_axis(run_dir)
+    warnings: list[str] = []
+    override = options.get("grain_angle_deg")
+    if override is not None:
+        radians = math.radians(float(override))
+        detected = axis
+        axis = np.array([math.cos(radians), math.sin(radians)])
+        warnings.append(f"grain direction set manually to {float(override):.1f} deg "
+                        "(overriding the detected boat axis)")
+        if detected is not None:
+            # The pattern grooves were generated from the DETECTED axis and are
+            # already baked into the fitted DXF. If the manual grain disagrees,
+            # the planks on the finished deck will not run with the material
+            # grain -- which is the whole reason the sheet has a direction.
+            detected_deg = math.degrees(math.atan2(detected[1], detected[0]))
+            difference = abs((float(override) - detected_deg + 90.0) % 180.0 - 90.0)
+            if difference > 3.0:
+                warnings.append(
+                    f"the manual grain angle differs from the pattern's boat axis by "
+                    f"{difference:.1f} deg ({detected_deg:.1f} deg). The pattern grooves are "
+                    "already fixed in the fitted DXF, so the planks and the material grain "
+                    "will not line up. Re-run the outline with the correct axis, or clear the "
+                    "manual angle."
+                )
+        return axis, 1.0, warnings
+    if axis is None:
+        warnings.append(
+            "no boat axis stored for this run (was a pattern selected?); the grain direction "
+            "falls back to the panel frame's +Y and is probably wrong -- set the grain angle "
+            "before cutting"
+        )
+    elif confidence < 0.5:
+        warnings.append(
+            f"boat axis confidence is only {confidence:.2f}; the grain direction may be wrong. "
+            "Check the sheet preview and set the grain angle manually if it looks off -- cutting "
+            "a directional material across the grain ruins the sheet."
+        )
+    return axis, confidence, warnings
+
+
 def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = None,
          progress: Progress | None = None, write_files: bool = True) -> dict[str, Any]:
     """Split by seams, nest, and (optionally) write the per-sheet DXFs."""
@@ -75,43 +125,7 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
     if not loops:
         raise ValueError(f"{source.name} contains no CAM loops")
 
-    axis, confidence = boat_axis(run_dir)
-    warnings: list[str] = []
-    override = options.get("grain_angle_deg")
-    if override is not None:
-        radians = math.radians(float(override))
-        detected = axis
-        axis = np.array([math.cos(radians), math.sin(radians)])
-        confidence = 1.0
-        warnings.append(f"grain direction set manually to {float(override):.1f} deg "
-                        "(overriding the detected boat axis)")
-        if detected is not None:
-            # The pattern grooves were generated from the DETECTED axis and are
-            # already baked into the fitted DXF. If the manual grain disagrees,
-            # the planks on the finished deck will not run with the material
-            # grain -- which is the whole reason the sheet has a direction.
-            detected_deg = math.degrees(math.atan2(detected[1], detected[0]))
-            difference = abs((float(override) - detected_deg + 90.0) % 180.0 - 90.0)
-            if difference > 3.0:
-                warnings.append(
-                    f"the manual grain angle differs from the pattern's boat axis by "
-                    f"{difference:.1f} deg ({detected_deg:.1f} deg). The pattern grooves are "
-                    "already fixed in the fitted DXF, so the planks and the material grain "
-                    "will not line up. Re-run the outline with the correct axis, or clear the "
-                    "manual angle."
-                )
-    elif axis is None:
-        warnings.append(
-            "no boat axis stored for this run (was a pattern selected?); the grain direction "
-            "falls back to the panel frame's +Y and is probably wrong -- set the grain angle "
-            "before cutting"
-        )
-    elif confidence < 0.5:
-        warnings.append(
-            f"boat axis confidence is only {confidence:.2f}; the grain direction may be wrong. "
-            "Check the sheet preview and set the grain angle manually if it looks off -- cutting "
-            "a directional material across the grain ruins the sheet."
-        )
+    axis, confidence, warnings = resolve_axis(run_dir, options)
     rotation = sheets_mod.sheet_transform(axis)
 
     step = float(options["sample_step_mm"])
@@ -194,7 +208,10 @@ def preview(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None 
 
     source = source_dxf(run_dir)
     loops, _pattern, _kind = sheets_mod.read_fitted_dxf(source) if source else ({}, {}, None)
-    axis, _c = boat_axis(run_dir)
+    # Same resolution plan() used, override included -- drawing the rings in a
+    # different frame from the one the placements were computed in put pieces
+    # outside the sheet.
+    axis, _confidence, _warnings = resolve_axis(run_dir, options)
     rotation = sheets_mod.sheet_transform(axis)
     step = float(options["sample_step_mm"])
 
@@ -240,7 +257,29 @@ def preview(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None 
         "usable_length_mm": options["max_part_length_mm"],
         "sheets": drawn,
     }
+    # plan(write_files=False) leaves `files` empty, so a preview would report no
+    # sheet DXFs even when they are sitting on disk -- and the page builds its
+    # download links from this list, so they never appeared.
+    result["files"] = exported_sheets(run_dir)
     return result
+
+
+def exported_sheets(run_dir: Path) -> list[dict[str, Any]]:
+    """Sheet DXFs already written for this run, newest export first."""
+
+    written = json.loads((Path(run_dir) / "sheets.json").read_text(encoding="utf-8")) \
+        if (Path(run_dir) / "sheets.json").is_file() else {}
+    by_name = {entry.get("name"): entry for entry in (written.get("files") or [])}
+    files: list[dict[str, Any]] = []
+    for path in sorted(Path(run_dir).glob("sheet_*.dxf")):
+        entry = dict(by_name.get(path.name) or {})
+        entry.setdefault("name", path.name)
+        entry.setdefault("sheet", len(files) + 1)
+        entry.setdefault("pieces", [])
+        entry.setdefault("utilisation", 0.0)
+        entry["exists"] = True
+        files.append(entry)
+    return files
 
 
 def _write_report(path: Path, result: dict[str, Any], options: dict[str, Any]) -> None:

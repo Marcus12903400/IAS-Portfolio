@@ -143,6 +143,34 @@ def flatten_quality(panel: Panel) -> dict[str, Any]:
     return out
 
 
+def _surface_payload_bytes(surface: Any, patch_id: int | None) -> float:
+    """Roughly what one worker would have to receive for a single panel."""
+
+    total = float(getattr(surface.floor_height_mm, "nbytes", 0))
+    total += float(getattr(surface.accepted_mask, "nbytes", 0))
+    if patch_id is not None and patch_id in surface.patch_masks:
+        total += float(getattr(surface.patch_masks[patch_id], "nbytes", 0))
+    return total
+
+
+def _panel_surface(surface: Any, patch_id: int) -> Any:
+    """The accepted surface carrying only the mask this panel needs.
+
+    build_development_mesh reads `patch_masks[patch_id]` and the shared
+    height raster and nothing else, so the other panels' masks are pure
+    transfer cost when a worker is spawned.
+    """
+
+    return type(surface)(
+        x_min_mm=surface.x_min_mm,
+        y_min_mm=surface.y_min_mm,
+        resolution_mm=surface.resolution_mm,
+        accepted_mask=surface.accepted_mask,
+        floor_height_mm=surface.floor_height_mm,
+        patch_masks={patch_id: surface.patch_masks[patch_id]},
+    )
+
+
 def develop_panel(
     surface: Any, patch_id: int, v1_config: dict[str, Any]
 ) -> tuple[Any, str | None]:
@@ -304,7 +332,22 @@ def _compute(
 
     pids = sorted(surface.patch_masks)
     workers = max(1, min(parallel.worker_count(v2_config), len(pids)))
-    timer.start("development", f"Developing (unrolling) {len(pids)} panel(s) across {workers} worker process(es)")
+    # Windows spawns workers rather than forking, so the accepted-surface raster
+    # is pickled to each one. On a big scan that raster is hundreds of megabytes
+    # and the copying costs more than the parallelism saves -- measured on the
+    # 807 MB Key West scan, five workers made this stage 5% SLOWER because one
+    # panel dominates the work anyway. Send each worker only the mask it needs,
+    # and fall back to serial when the payload is still too big to be worth it.
+    budget_mb = float((v2_config.get("parallel") or {}).get("max_transfer_mb", 192.0))
+    payload_mb = _surface_payload_bytes(surface, pids[0] if pids else None) / 1e6
+    if workers > 1 and payload_mb * workers > budget_mb:
+        timer.start("development", f"Developing (unrolling) {len(pids)} panel(s) in-process "
+                                   f"({payload_mb * workers:.0f} MB would have to be copied to "
+                                   f"{workers} workers, over the {budget_mb:.0f} MB budget)")
+        workers = 1
+    else:
+        timer.start("development", f"Developing (unrolling) {len(pids)} panel(s) across "
+                                   f"{workers} worker process(es)")
     panels: dict[int, Panel] = {}
     candidate_by_id = {c.candidate_id: c for c in candidates}
 
@@ -319,7 +362,9 @@ def _compute(
         )
 
     outcomes = parallel.map_processes(
-        develop_panel, [(surface, pid, config) for pid in pids], workers, on_error=_worker_failed,
+        develop_panel,
+        [(surface if workers <= 1 else _panel_surface(surface, pid), pid, config) for pid in pids],
+        workers, on_error=_worker_failed,
     )
     for pid, outcome in zip(pids, outcomes):
         if outcome is None:                      # worker died -- do it here instead

@@ -58,8 +58,13 @@ def list_runs() -> list[dict[str, Any]]:
 
 def run_files(run_dir: Path) -> dict[str, bool]:
     names = ["outline.3dm", "outline.dxf", "auto_cam.3dm", "final_auto.dxf", "final.dxf",
-             "outline_report.md", "autofit_report.md", "final_report.md", "calibration_report.md", "run.json"]
-    return {name: (run_dir / name).is_file() for name in names}
+             "outline_report.md", "autofit_report.md", "final_report.md", "calibration_report.md",
+             "run.json", "sheet_report.md"]
+    files = {name: (run_dir / name).is_file() for name in names}
+    # Sheet DXFs are numbered and there can be any number of them.
+    for path in sorted(run_dir.glob("sheet_*.dxf")):
+        files[path.name] = True
+    return files
 
 
 # ---------------------------------------------------------------------------

@@ -228,3 +228,78 @@ def test_defaults_match_the_shop_numbers():
     assert opts["max_part_length_mm"] == pytest.approx(79 * 25.4)
     assert opts["seam_gap_mm"] == 6.0
     assert opts["part_spacing_mm"] == 20.0
+
+
+# ------------------------------------------- regressions found by review
+
+def test_a_seam_drawn_over_one_panel_does_not_cut_a_distant_one():
+    """Seams are extended by a bbox diagonal before cutting so a roughly drawn
+    line still severs the panel cleanly. That extension must not reach panels
+    the user never drew across -- it used to slice a panel metres away."""
+
+    opts = options()
+    panel = sheets.Loop(np.array([[0, 0, 0], [1000, 0, 0], [1000, 600, 0], [0, 600, 0]], dtype=float))
+    elsewhere = sheets.Seam("s", 5000.0, -900.0, 5000.0, 900.0, panel_id=None)
+    pieces, _warnings = sheets.split_panel(1, panel, [], [elsewhere], opts)
+    assert len(pieces) == 1 and pieces[0].from_seam is False
+
+    across = sheets.Seam("s", 500.0, -900.0, 500.0, 900.0, panel_id=None)
+    pieces, _warnings = sheets.split_panel(1, panel, [], [across], opts)
+    assert len(pieces) == 2
+
+
+def test_a_seam_explicitly_bound_to_a_panel_still_applies():
+    opts = options()
+    panel = sheets.Loop(np.array([[0, 0, 0], [1000, 0, 0], [1000, 600, 0], [0, 600, 0]], dtype=float))
+    bound = sheets.Seam("s", 500.0, -900.0, 500.0, 900.0, panel_id=1)
+    assert len(sheets.split_panel(1, panel, [], [bound], opts)[0]) == 2
+    assert len(sheets.split_panel(2, panel, [], [bound], opts)[0]) == 1
+
+
+def signed_area(points):
+    x, y = points[:, 0], points[:, 1]
+    return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
+
+
+def test_split_pieces_come_out_wound_counter_clockwise():
+    """ingest.order_loops enforces CCW-outer/CW-hole for every other loop this
+    codebase emits; split pieces used to come out clockwise."""
+
+    opts = options()
+    panel = rounded_rect(1600.0, 900.0, 120.0)
+    seam = sheets.Seam("s", 800.0, -500.0, 800.0, 1400.0)
+    for piece in sheets.split_panel(1, panel, [], [seam], opts)[0]:
+        points, _s = sheets.sample_loop(piece.outer, opts["sample_step_mm"])
+        assert signed_area(points) > 0
+        for hole in piece.holes:
+            hole_points, _h = sheets.sample_loop(hole, opts["sample_step_mm"])
+            assert signed_area(hole_points) < 0
+
+
+def test_spacing_buffer_does_not_over_reserve_at_a_sharp_corner():
+    """A mitre buffer runs far past the nominal offset at a sharp corner -- it
+    measured 80 mm beyond a round buffer on a 10-degree corner at 20 mm --
+    which pushes pieces apart by much more than the user asked for."""
+
+    from shapely.geometry import Polygon as _Polygon
+
+    # A very acute apex: the two join styles differ most here.
+    spike = _Polygon([(0.0, 0.0), (900.0, 6.0), (900.0, -6.0)])
+    spacing = 20.0
+    round_join = spike.buffer(spacing, join_style=1)
+    mitre_join = spike.buffer(spacing, join_style=2)
+
+    round_reach = spike.bounds[0] - round_join.bounds[0]
+    mitre_reach = spike.bounds[0] - mitre_join.bounds[0]
+    assert round_reach == pytest.approx(spacing, abs=0.5), "a round join reaches exactly the offset"
+    assert mitre_reach > round_reach * 3, "a mitre join runs far past it at a sharp corner"
+
+    # And the nester must keep two pieces exactly the requested distance apart
+    # rather than the mitre distance.
+    opts = options()
+    rotation = sheets.sheet_transform(np.array([1.0, 0.0]))
+    wedges = [sheets.Piece(f"W{i}", 1, sheets.Loop(np.array(
+        [[0.0, 0.0, 0.0], [820.0, 6.0, 0.0], [820.0, -6.0, 0.0]], dtype=float)), [], 4920.0)
+        for i in range(2)]
+    sheet_list, _summary, _warnings = nesting.nest(wedges, rotation, opts)
+    assert len(sheet_list) == 1, "two slivers must not need two sheets"

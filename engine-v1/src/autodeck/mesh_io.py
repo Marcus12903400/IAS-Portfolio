@@ -117,34 +117,72 @@ def mesh_statistics(mesh: Mesh) -> dict[str, object]:
     triangles = vertices[faces]
     cross = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
     areas = 0.5 * np.linalg.norm(cross, axis=1)
-    edge_counts: dict[tuple[int, int], int] = {}
-    edge_faces: dict[tuple[int, int], list[int]] = {}
-    edge_directions: dict[tuple[int, int], list[bool]] = {}
-    for face_index, face in enumerate(faces):
-        for a, b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
-            edge = (int(min(a, b)), int(max(a, b)))
-            edge_counts[edge] = edge_counts.get(edge, 0) + 1
-            edge_faces.setdefault(edge, []).append(face_index)
-            edge_directions.setdefault(edge, []).append(int(a) < int(b))
-    boundary_edges = sum(count == 1 for count in edge_counts.values())
-    nonmanifold_edges = sum(count > 2 for count in edge_counts.values())
-    winding_conflicts = sum(
-        len(directions) == 2 and directions[0] == directions[1]
-        for directions in edge_directions.values()
-    )
-    parent = np.arange(len(faces), dtype=np.int64)
-    def find(value: int) -> int:
-        while parent[value] != value:
-            parent[value] = parent[parent[value]]; value = int(parent[value])
-        return value
-    def union(first: int, second: int) -> None:
-        root_a, root_b = find(first), find(second)
-        if root_a != root_b:
-            parent[root_b] = root_a
-    for incident in edge_faces.values():
-        for face_index in incident[1:]:
-            union(incident[0], face_index)
-    connected_components = len({find(index) for index in range(len(faces))})
+    # Every quantity below is a counting query over the sorted edge array, so
+    # it is done with numpy rather than three Python dicts keyed by edge
+    # tuples plus a Python union-find. On the 10.1 M-triangle Key West scan
+    # that loop cost ~77 s and produced nothing but this diagnostics blob.
+    if len(faces):
+        directed = np.empty((len(faces) * 3, 2), dtype=np.int64)
+        directed[0::3] = faces[:, [0, 1]]
+        directed[1::3] = faces[:, [1, 2]]
+        directed[2::3] = faces[:, [2, 0]]
+        face_of = np.repeat(np.arange(len(faces), dtype=np.int64), 3)
+        ascending = directed[:, 0] < directed[:, 1]      # the winding flag
+        undirected = np.sort(directed, axis=1)
+
+        order = np.lexsort((undirected[:, 1], undirected[:, 0]))
+        keys = undirected[order]
+        starts_new = np.empty(len(keys), dtype=bool)
+        starts_new[0] = True
+        np.not_equal(keys[1:], keys[:-1]).any(axis=1, out=starts_new[1:])
+        group = np.cumsum(starts_new) - 1
+        counts = np.bincount(group)
+
+        boundary_edges = int(np.count_nonzero(counts == 1))
+        nonmanifold_edges = int(np.count_nonzero(counts > 2))
+
+        # Two faces sharing an edge must traverse it in opposite directions;
+        # equal directions mean one of them is wound inconsistently.
+        starts = np.zeros(len(counts), dtype=np.int64)
+        np.cumsum(counts[:-1], out=starts[1:])
+        pair = np.flatnonzero(counts == 2)
+        if len(pair):
+            first = ascending[order][starts[pair]]
+            second = ascending[order][starts[pair] + 1]
+            winding_conflicts = int(np.count_nonzero(first == second))
+        else:
+            winding_conflicts = 0
+
+        # Faces are connected when they share an edge, whatever its degree.
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components as _components
+
+        # Link every face on a shared edge to the first face on that edge --
+        # exactly the union-find the old loop performed. Manifold edges (the
+        # overwhelming majority) are handled with one vectorised pair; the rare
+        # higher-degree edges get the small loop.
+        sorted_faces = face_of[order]
+        pairs = np.flatnonzero(counts == 2)
+        anchors = [sorted_faces[starts[pairs]]]
+        members = [sorted_faces[starts[pairs] + 1]]
+        for group_index in np.flatnonzero(counts > 2):
+            begin = starts[group_index]
+            incident = sorted_faces[begin:begin + counts[group_index]]
+            anchors.append(np.full(len(incident) - 1, incident[0], dtype=np.int64))
+            members.append(incident[1:])
+        anchors = np.concatenate(anchors) if anchors else np.zeros(0, dtype=np.int64)
+        members = np.concatenate(members) if members else np.zeros(0, dtype=np.int64)
+        if len(anchors):
+            graph = coo_matrix(
+                (np.ones(len(anchors), dtype=np.int8), (anchors, members)),
+                shape=(len(faces), len(faces)),
+            )
+            connected_components = int(_components(graph, directed=False, return_labels=False))
+        else:
+            connected_components = int(len(faces))
+    else:
+        boundary_edges = nonmanifold_edges = winding_conflicts = 0
+        connected_components = 0
     face_uv = mesh.face_uv
     uv_corner_coverage = 0.0
     if face_uv is not None and face_uv.size:

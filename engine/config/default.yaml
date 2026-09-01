@@ -13,7 +13,8 @@
   "parallel": {
     "enabled": true,
     "cpu_fraction": 0.5,
-    "max_workers": 0
+    "max_workers": 0,
+    "max_transfer_mb": 192.0
   },
   "sheets": {
     "sheet_width_mm": 1016.0,

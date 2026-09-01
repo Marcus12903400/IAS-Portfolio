@@ -41,8 +41,8 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 from shapely.geometry import LineString, MultiPolygon, Polygon
+from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
-from shapely.prepared import prep
 
 MM_PER_INCH = 25.4
 
@@ -358,7 +358,19 @@ def split_panel(panel_id: int, outer: Loop, holes: Sequence[Loop], seams: Sequen
     if panel.is_empty:
         return [], [f"panel {panel_id}: empty after sampling; skipped"]
 
-    relevant = [s for s in seams if s.panel_id in (None, panel_id)]
+    # A seam with panel_id None applies "wherever it crosses" -- but that has to
+    # mean where the user's DRAWN line crosses, not where the extended one does.
+    # The extension below reaches a whole bbox diagonal in both directions, so
+    # without this test a seam drawn over one panel silently slices another
+    # panel metres away.
+    relevant: list[Seam] = []
+    for seam in seams:
+        if seam.panel_id == panel_id:
+            relevant.append(seam)
+        elif seam.panel_id is None:
+            drawn = LineString([(seam.x1, seam.y1), (seam.x2, seam.y2)])
+            if drawn.intersects(panel):
+                relevant.append(seam)
     if not relevant:
         piece = Piece(f"P{panel_id}", panel_id, outer, list(holes), float(panel.area))
         return [piece], warnings
@@ -387,6 +399,9 @@ def split_panel(panel_id: int, outer: Loop, holes: Sequence[Loop], seams: Sequen
     pieces: list[Piece] = []
     tolerance = float(options["arc_rebuild_tolerance_mm"])
     for index, part in enumerate(sorted(parts, key=lambda g: (-g.area, g.bounds))):
+        # CCW outer, CW holes -- the convention ingest.order_loops enforces for
+        # every other loop this codebase emits.
+        part = orient(part, 1.0)
         outer_loop, worst = _rebuild_ring(np.asarray(part.exterior.coords)[:-1], sources, tolerance, step)
         hole_loops = []
         for ring in part.interiors:
