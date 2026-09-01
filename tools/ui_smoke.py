@@ -41,8 +41,9 @@ def main() -> int:
                 if m.type in ("error", "warning") else None)
         page.on("pageerror", lambda e: problems.append(f"pageerror: {e}"))
 
-        page.goto(args.url, wait_until="networkidle")
-        page.wait_for_timeout(2500)
+        # Not networkidle: the page polls /api/state, so the network never idles.
+        page.goto(args.url, wait_until="load")
+        page.wait_for_timeout(3500)
 
         if args.run_id:
             page.evaluate(
