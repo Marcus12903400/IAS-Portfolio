@@ -80,10 +80,26 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
     override = options.get("grain_angle_deg")
     if override is not None:
         radians = math.radians(float(override))
+        detected = axis
         axis = np.array([math.cos(radians), math.sin(radians)])
         confidence = 1.0
         warnings.append(f"grain direction set manually to {float(override):.1f} deg "
                         "(overriding the detected boat axis)")
+        if detected is not None:
+            # The pattern grooves were generated from the DETECTED axis and are
+            # already baked into the fitted DXF. If the manual grain disagrees,
+            # the planks on the finished deck will not run with the material
+            # grain -- which is the whole reason the sheet has a direction.
+            detected_deg = math.degrees(math.atan2(detected[1], detected[0]))
+            difference = abs((float(override) - detected_deg + 90.0) % 180.0 - 90.0)
+            if difference > 3.0:
+                warnings.append(
+                    f"the manual grain angle differs from the pattern's boat axis by "
+                    f"{difference:.1f} deg ({detected_deg:.1f} deg). The pattern grooves are "
+                    "already fixed in the fitted DXF, so the planks and the material grain "
+                    "will not line up. Re-run the outline with the correct axis, or clear the "
+                    "manual angle."
+                )
     elif axis is None:
         warnings.append(
             "no boat axis stored for this run (was a pattern selected?); the grain direction "

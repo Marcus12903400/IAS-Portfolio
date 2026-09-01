@@ -180,15 +180,24 @@ def _bulge_through(p0: np.ndarray, mid: np.ndarray, p1: np.ndarray) -> float:
     return -2.0 * sagitta / length
 
 
-def rebuild_loop(points: np.ndarray, source: np.ndarray, original: Loop,
+def rebuild_loop(points: np.ndarray, segment_source: np.ndarray, original: Loop,
                  tolerance_mm: float) -> tuple[Loop, float]:
-    """Turn a ring of sampled points back into (x, y, bulge) vertices.
+    """Turn a ring of points back into (x, y, bulge) vertices.
 
-    Consecutive points sharing a provenance index that was an arc in the
-    original loop collapse to one bulged segment; everything else (straight
-    originals, and edges the seam kerf introduced, marked -1) becomes a line.
-    Returns the loop and the largest deviation between a rebuilt arc and the
-    points it replaced, so the caller can refuse a bad rebuild.
+    Provenance is per SEGMENT, not per vertex: `segment_source[i]` is the
+    original loop segment that produced the edge from `points[i]` to
+    `points[i+1]`, or -1 for an edge the seam kerf introduced.
+
+    Per-vertex provenance does not work here.  A straight kerf cut arrives from
+    shapely as a single edge with only two vertices, and both of them sit ON
+    the original boundary at the points where the cut meets it -- so both would
+    snap to boundary provenance, the seam edge would get no group of its own,
+    and the ring's two ends would merge straight through it, closing the piece
+    with a diagonal across the cut.
+
+    Runs of segments sharing an arc provenance collapse into one bulge;
+    everything else becomes a line.  Returns the loop and the worst deviation
+    between a rebuilt arc and the points it replaced.
     """
 
     n = len(points)
@@ -196,41 +205,44 @@ def rebuild_loop(points: np.ndarray, source: np.ndarray, original: Loop,
         return Loop(np.zeros((0, 3))), 0.0
     original_bulges = original.bulges
 
-    # Group consecutive points by provenance, treating the ring as circular.
+    # Only segments from the SAME original segment may be grouped. Introduced
+    # edges (-1) each stand alone: where two seams cross, a piece's ring has two
+    # kerf edges meeting at a corner, and grouping them would collapse that
+    # corner and cut the piece short.
     groups: list[tuple[int, list[int]]] = []
     for index in range(n):
-        src = int(source[index])
-        if groups and groups[-1][0] == src:
+        src = int(segment_source[index])
+        if groups and groups[-1][0] == src and src >= 0:
             groups[-1][1].append(index)
         else:
             groups.append((src, [index]))
-    if len(groups) > 1 and groups[0][0] == groups[-1][0]:
+    # The ring's start usually falls in the middle of one original run.
+    if len(groups) > 1 and groups[0][0] == groups[-1][0] and groups[0][0] >= 0:
         groups[0] = (groups[0][0], groups[-1][1] + groups[0][1])
         groups.pop()
 
     vertices: list[list[float]] = []
     worst = 0.0
-    for src, indices in groups:
-        start_point = points[indices[0]]
+    for src, segments in groups:
+        start_point = points[segments[0]]
+        end_point = points[(segments[-1] + 1) % n]
         is_arc = 0 <= src < len(original_bulges) and abs(float(original_bulges[src])) > 1e-12
-        if not is_arc or len(indices) < 3:
+        if not is_arc or len(segments) < 3:
             vertices.append([start_point[0], start_point[1], 0.0])
             continue
-        end_index = (indices[-1] + 1) % n
-        end_point = points[end_index]
-        mid_point = points[indices[len(indices) // 2]]
+        mid_point = points[segments[len(segments) // 2]]
         bulge = _bulge_through(start_point, mid_point, end_point)
         if abs(bulge) < 1e-9:
             vertices.append([start_point[0], start_point[1], 0.0])
             continue
         centre, radius, _s, _t = bulge_to_arc(start_point, end_point, bulge)
-        covered = points[indices]
+        covered = points[[s for s in segments]]
         deviation = float(np.abs(np.linalg.norm(covered - centre, axis=1) - radius).max())
         if deviation > tolerance_mm:
             # Do not fake an arc through points that are not on one; keep the
             # sampled polyline rather than cut the wrong shape.
-            for idx in indices:
-                vertices.append([points[idx][0], points[idx][1], 0.0])
+            for index in segments:
+                vertices.append([points[index][0], points[index][1], 0.0])
             continue
         worst = max(worst, deviation)
         vertices.append([start_point[0], start_point[1], bulge])
@@ -396,9 +408,12 @@ def _rebuild_ring(ring: np.ndarray, sources: Sequence[tuple[Loop, np.ndarray, np
                   tolerance_mm: float, step_mm: float) -> tuple[Loop, float]:
     """Attach provenance to a boolean-output ring, then rebuild its arcs.
 
-    A ring vertex within half a sample step of an original sampled point came
-    from that original segment; anything else is a new edge cut by the seam
-    kerf and is marked -1 so it stays a straight line.
+    Provenance is decided per SEGMENT, from each segment's MIDPOINT: an edge
+    whose middle lies on the original boundary came from it, while the middle
+    of a seam-kerf edge is out in open space and is marked -1.  Testing the
+    midpoint rather than the endpoints is what distinguishes the cut from the
+    boundary it cuts -- a kerf edge's two endpoints both sit on the original
+    boundary and would otherwise look like part of it.
     """
 
     from scipy.spatial import cKDTree
@@ -406,24 +421,27 @@ def _rebuild_ring(ring: np.ndarray, sources: Sequence[tuple[Loop, np.ndarray, np
     if len(ring) < 3:
         return Loop(np.zeros((0, 3))), 0.0
     all_points = np.vstack([pts for _loop, pts, _src in sources])
-    owner = np.concatenate([np.full(len(pts), i, dtype=np.int64) for i, (_l, pts, _s) in enumerate(sources)])
+    owner = np.concatenate([np.full(len(pts), i, dtype=np.int64)
+                            for i, (_l, pts, _s) in enumerate(sources)])
     all_src = np.concatenate([src for _loop, _pts, src in sources])
 
+    midpoints = 0.5 * (ring + np.roll(ring, -1, axis=0))
     tree = cKDTree(all_points)
-    distance, nearest = tree.query(ring, k=1, workers=-1)
+    distance, nearest = tree.query(midpoints, k=1, workers=-1)
     snap = max(step_mm * 0.75, 1e-6)
-    provenance = np.where(distance <= snap, all_src[nearest], -1)
-    loop_of = np.where(distance <= snap, owner[nearest], -1)
+    on_original = distance <= snap
+    segment_source = np.where(on_original, all_src[nearest], -1)
+    loop_of = np.where(on_original, owner[nearest], -1)
 
-    # Segments are only comparable within one original loop; if a ring mixes
-    # loops, keep provenance but rebuild against each point's own loop.
-    best: Loop | None = None
-    worst = 0.0
-    dominant = np.bincount(loop_of[loop_of >= 0], minlength=len(sources)).argmax() if (loop_of >= 0).any() else -1
-    reference = sources[dominant][0] if dominant >= 0 else Loop(np.zeros((0, 3)))
-    provenance = np.where(loop_of == dominant, provenance, -1)
-    best, worst = rebuild_loop(ring, provenance, reference, tolerance_mm)
-    return best, worst
+    # Segment indices are only meaningful within one original loop, so rebuild
+    # against whichever loop supplied most of this ring and treat the rest as
+    # introduced edges.
+    if not (loop_of >= 0).any():
+        return rebuild_loop(ring, np.full(len(ring), -1, dtype=np.int64),
+                            Loop(np.zeros((0, 3))), tolerance_mm)
+    dominant = int(np.bincount(loop_of[loop_of >= 0], minlength=len(sources)).argmax())
+    segment_source = np.where(loop_of == dominant, segment_source, -1)
+    return rebuild_loop(ring, segment_source, sources[dominant][0], tolerance_mm)
 
 
 # --------------------------------------------------------------------------
