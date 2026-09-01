@@ -107,3 +107,34 @@ def test_edge_strength_on_an_empty_mesh_is_empty():
     strength, diagnostics = texture.edge_strength(np.zeros((0, 3)), empty_adjacency([], []), config)
     assert len(strength) == 0
     assert diagnostics["edges"] == 0
+
+
+def test_analysis_colors_follow_source_face_indices():
+    """Colour is sampled on the ORIGINAL mesh and indexed through
+    AnalysisMesh.source_face_indices. If that mapping were dropped or
+    misaligned, every face would get some other face's colour and the evidence
+    would be confidently wrong rather than absent."""
+
+    import types
+
+    original = Mesh(np.zeros((3, 3)), np.array([[0, 1, 2]]))
+    palette = np.array([[0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9], [0.5, 0.5, 0.5]])
+
+    calls = {}
+
+    def fake_face_colors(mesh, config, log=None):
+        calls["mesh"] = mesh
+        return palette
+
+    saved = texture.face_colors
+    texture.face_colors = fake_face_colors
+    try:
+        picked = texture.analysis_face_colors(original, np.array([3, 0, 2]), {}, None)
+        assert np.array_equal(picked, palette[[3, 0, 2]])
+        assert calls["mesh"] is original, "sampling must happen on the original mesh"
+
+        # An index outside the original mesh must abstain, not read garbage.
+        assert texture.analysis_face_colors(original, np.array([0, 99]), {}, None) is None
+        assert texture.analysis_face_colors(original, np.array([], dtype=np.int64), {}, None) is None
+    finally:
+        texture.face_colors = saved

@@ -1,11 +1,30 @@
-# AutoDeck v0.4.2 — the review app
+# AutoDeck v5 — the review app
 
 Double-click to open. Drop in a 3D scan, see it in 3D, run the outline /
 pattern / auto-fit stages and see every result drawn **over the mesh** and in
-the **flat panel layout**. Download `final_auto.dxf` for VCarve, or
-`outline.3dm` to draw on in Rhino and ingest back.
+the **flat panel layout**. Download `final_auto.dxf` for VCarve, per-sheet DXFs
+for the nested pieces, or `outline.3dm` to draw on in Rhino and ingest back.
 
-New in v0.4.2:
+New in v5:
+
+- **Open a scan folder** — the `.obj`, its `.mtl` and the texture images come in
+  together, and the deck is shown with its real photographic surface under a new
+  *Texture (scan photo)* shading mode. The colour also feeds the deck-edge
+  detection as extra evidence; the root README explains how that is kept from
+  making a good geometric result worse.
+- **Seams** — on *Flat layout & seams*, press **Draw a seam** and drag a line
+  where a join should go; drag either end to move it. Each seam splits the panel
+  leaving a 6 mm gap between neighbouring pieces, and the fitted arcs survive the
+  cut instead of being flattened to polylines.
+- **Sheet layout** — a third tab nesting the pieces onto 40 × 80 inch sheets with
+  the grain along the boat (0° or 180° rotation only), a minimum piece gap you
+  can set, and one `sheet_NN.dxf` per sheet for VCarve.
+- **Faster.** A cold run of the 807 MB Key West scan went from 781.7 s to
+  460.4 s, mostly from vectorising the curvature stage (223.6 s → 8.8 s) and the
+  OBJ statistics (142.5 s → 50.6 s). AutoDeck now uses about half the machine's
+  logical CPUs by default instead of exactly one core.
+
+From v0.4.2:
 
 - **Mesh shading controls** (right panel): Smooth / **Flat (facets)** /
   **Slope — walls dark** / **Height colors**, plus **light angle** and **light
