@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 
 from . import cache as cache_module
+from . import parallel
 from . import v1compat
 from .assign import Assignment, GridInfo, PanelGeometry, assign_curve
 from .config import config_hash, deep_merge
@@ -140,6 +141,26 @@ def flatten_quality(panel: Panel) -> dict[str, Any]:
         out["edge_strain_p95_percent"] = float(d.get("absolute_edge_strain_percent", {}).get("p95", 0.0))
         out["edge_strain_max_percent"] = float(d.get("absolute_edge_strain_percent", {}).get("maximum", 0.0))
     return out
+
+
+def develop_panel(
+    surface: Any, patch_id: int, v1_config: dict[str, Any]
+) -> tuple[Any, str | None]:
+    """Develop one panel, with the same intrinsic-then-rigid-planar retry the
+    serial loop used.
+
+    Module level and importable by name on purpose: Windows spawns worker
+    processes rather than forking, so a closure or local function cannot be
+    sent to a ProcessPoolExecutor.  Returns the result plus the reason the
+    intrinsic attempt was abandoned (None if it succeeded), so the parent can
+    emit warnings in deterministic panel order.
+    """
+
+    result = v1compat.develop_patch(surface, patch_id, v1_config)
+    if result.status != "INVALID":
+        return result, None
+    reason = "; ".join(result.warnings)
+    return v1compat.develop_patch_rigid_planar(surface, patch_id, v1_config), reason
 
 
 def _family_for_layer(layer: str, config: dict[str, Any]) -> str | None:
@@ -275,14 +296,31 @@ def _compute(
     if not 0.50 <= ratio <= 1.50:
         warnings.append(f"Top-view primary occupancy ratio {ratio:.3f} is not physically consistent with the candidate area.")
 
-    timer.start("development", "Developing (unrolling) each panel")
+    pids = sorted(surface.patch_masks)
+    workers = max(1, min(parallel.worker_count(v2_config), len(pids)))
+    timer.start("development", f"Developing (unrolling) {len(pids)} panel(s) across {workers} worker process(es)")
     panels: dict[int, Panel] = {}
     candidate_by_id = {c.candidate_id: c for c in candidates}
-    for pid in sorted(surface.patch_masks):
-        result = v1compat.develop_patch(surface, pid, config)
-        if result.status == "INVALID":
-            warnings.append(f"panel {pid}: intrinsic development failed ({'; '.join(result.warnings)}); retrying rigid-planar")
-            result = v1compat.develop_patch_rigid_planar(surface, pid, config)
+
+    # Panels develop independently, and development is nearly all libigl, which
+    # holds the GIL -- so this fans out to processes, not threads (see
+    # parallel.py).  Outcomes are consumed in sorted-pid order, so a parallel
+    # run emits exactly the warnings a serial one would, in the same order.
+    def _worker_failed(index: int, exc: BaseException) -> None:
+        warnings.append(
+            f"panel {pids[index]}: development worker process failed "
+            f"({type(exc).__name__}: {exc}); recomputed in-process"
+        )
+
+    outcomes = parallel.map_processes(
+        develop_panel, [(surface, pid, config) for pid in pids], workers, on_error=_worker_failed,
+    )
+    for pid, outcome in zip(pids, outcomes):
+        if outcome is None:                      # worker died -- do it here instead
+            outcome = develop_panel(surface, pid, config)
+        result, retry_reason = outcome
+        if retry_reason is not None:
+            warnings.append(f"panel {pid}: intrinsic development failed ({retry_reason}); retrying rigid-planar")
         if result.status == "INVALID" or not len(result.uv_mm):
             warnings.append(f"panel {pid}: development INVALID; panel skipped")
             continue

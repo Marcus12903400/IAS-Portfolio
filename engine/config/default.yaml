@@ -10,6 +10,11 @@
     "decisive_fraction": 0.5,
     "nearest_mesh_max_distance_factor": 2.0
   },
+  "parallel": {
+    "enabled": true,
+    "cpu_fraction": 0.5,
+    "max_workers": 0
+  },
   "layout": {
     "mode": "nest",
     "nest_gap_mm": 150.0,
