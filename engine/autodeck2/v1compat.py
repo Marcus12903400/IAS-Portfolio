@@ -107,7 +107,7 @@ _register("up_axis.resolve_up_axis", _up_axis.resolve_up_axis, ["requested", "sc
 _register("preprocessing.preprocess", _preprocessing.preprocess, ["mesh", "units", "config", "up_vector"])
 _register("preprocessing.build_adjacency", _preprocessing.build_adjacency, ["mesh"])
 _register("curvature.calculate_geometry_fields", _curvature.calculate_geometry_fields, ["mesh", "adjacency", "config"])
-_register("relief.calculate_boundary_field", _relief.calculate_boundary_field, ["mesh", "adjacency", "fields", "config", "paper_centers_mm"])
+_register("relief.calculate_boundary_field", _relief.calculate_boundary_field, ["mesh", "adjacency", "fields", "config", "paper_centers_mm", "face_colors"])
 _register("orientation.calculate_orientation_field", _orientation.calculate_orientation_field, ["adjacency", "fields", "boundary", "config", "up_vector"])
 _register("component_diagnostics.segmentation_stage_diagnostics", _component_diagnostics.segmentation_stage_diagnostics,
           ["orientation_mask", "conformability_mask", "adjacency", "face_areas", "boundary", "maximum_crossing_cost",
@@ -199,8 +199,18 @@ def calculate_geometry_fields(mesh: Mesh, adjacency: Any, config: dict[str, Any]
     return _curvature.calculate_geometry_fields(mesh, adjacency, config)
 
 
-def calculate_boundary_field(mesh: Mesh, adjacency: Any, fields: Any, config: dict[str, Any]) -> tuple[Any, list[str]]:
-    return _relief.calculate_boundary_field(mesh, adjacency, fields, config, [])
+def calculate_boundary_field(mesh: Mesh, adjacency: Any, fields: Any, config: dict[str, Any],
+                             face_colors: Any = None) -> tuple[Any, list[str]]:
+    return _relief.calculate_boundary_field(mesh, adjacency, fields, config, [], face_colors)
+
+
+def analysis_face_colors(original: Mesh, source_face_indices: Any, config: dict[str, Any],
+                         log: Any = None) -> Any:
+    """Per-face colour for the analysis mesh, or None when the scan has no
+    usable texture. See autodeck.texture for why this samples the original."""
+
+    from autodeck import texture as _texture
+    return _texture.analysis_face_colors(original, source_face_indices, config, log)
 
 
 def calculate_orientation_field(adjacency: Any, fields: Any, boundary: Any, config: dict[str, Any], up_vector: np.ndarray | None) -> Any:

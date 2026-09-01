@@ -267,7 +267,13 @@ def _compute(
     fields = v1compat.calculate_geometry_fields(analysis.mesh_mm, adjacency, config)
 
     timer.start("boundary_field", "Computing wall/floor boundary evidence")
-    boundary, boundary_warnings = v1compat.calculate_boundary_field(analysis.mesh_mm, adjacency, fields, config)
+    # Colour evidence from the scan's own texture, when it has one. Sampled on
+    # the original mesh and indexed through source_face_indices so it does not
+    # depend on preprocessing carrying uv arrays through.
+    face_colors = v1compat.analysis_face_colors(
+        original, analysis.source_face_indices, config, progress)
+    boundary, boundary_warnings = v1compat.calculate_boundary_field(
+        analysis.mesh_mm, adjacency, fields, config, face_colors)
     warnings.extend(boundary_warnings)
 
     timer.start("orientation", "Computing orientation field and segmentation components")

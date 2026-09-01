@@ -1,4 +1,4 @@
-"""AutoDeck v0.4.2 -- the review app.
+"""AutoDeck v5 -- the review app.
 
 A local web application (double-click to open) that wraps the AutoDeck2
 engine: load a 3D scan, preview it, run the outline / teak / auto-fit
@@ -7,4 +7,4 @@ layout.  The engine itself is AutoDeck2 (`../engine`), which in turn uses
 AutoDeck v1; this package never copies either.
 """
 
-__version__ = "0.4.2"
+__version__ = "5.0.0"

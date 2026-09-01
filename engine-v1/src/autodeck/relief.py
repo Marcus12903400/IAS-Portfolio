@@ -34,6 +34,7 @@ def calculate_boundary_field(
     fields: GeometryFields,
     config: dict,
     paper_centers_mm: list[np.ndarray] | None = None,
+    face_colors: np.ndarray | None = None,
 ) -> tuple[BoundaryField, list[str]]:
     a, b = adjacency.face_a, adjacency.face_b
     if len(a) == 0:
@@ -76,6 +77,23 @@ def calculate_boundary_field(
         + float(weights["valley_weight"]) * valley
         + float(weights["fine_scale_weight"]) * fine_strength
     )
+    warnings: list[str] = []
+    if face_colors is not None and len(face_colors) == len(fields.face_normals):
+        from .texture import edge_strength as _texture_edge_strength
+
+        colour_strength, colour_diagnostics = _texture_edge_strength(
+            face_colors, adjacency, config, fields.face_centroids)
+        colour_weight = float((config.get("texture") or {}).get("boundary_weight", 0.35))
+        weighted_sum = weighted_sum + colour_weight * colour_strength
+        # Deliberately NOT folded into decisive_evidence below: colour may
+        # reinforce a boundary the geometry already suspects, but must never be
+        # able to declare one alone, or a stain or scuff could invent a wall.
+        warnings.append(
+            "TEXTURE EVIDENCE: colour change added to the boundary cost at weight "
+            f"{colour_weight:g}; {colour_diagnostics['edges_above_soft']:,} of "
+            f"{colour_diagnostics['edges']:,} edges show colour change "
+            f"(p95 distance {colour_diagnostics['p95_color_distance']:.3f})"
+        )
     # A single decisive cue must be able to stop growth. A plain weighted average
     # incorrectly caps concentrated normal rotation below the segmentation cutoff.
     decisive_evidence = np.maximum.reduce((
@@ -88,7 +106,6 @@ def calculate_boundary_field(
     raw = np.clip(np.maximum(weighted_sum, decisive_evidence), 0.0, 1.0)
     unsuppressed = raw.copy()
     suppressed = np.zeros(len(raw), dtype=bool)
-    warnings: list[str] = []
     paper_centers_mm = paper_centers_mm or []
     if paper_centers_mm:
         edge_midpoints = 0.5 * (mesh.vertices[adjacency.edge_u] + mesh.vertices[adjacency.edge_v])

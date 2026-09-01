@@ -1,4 +1,4 @@
-/* AutoDeck 0.4.2 review page */
+/* AutoDeck 5 review page */
 (function () {
   "use strict";
 

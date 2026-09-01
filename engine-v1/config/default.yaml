@@ -35,6 +35,14 @@
     "coherence_neighbor_fraction": 0.55,
     "coherence_fill_score": 0.74
   },
+  "texture": {
+    "enabled": true,
+    "boundary_weight": 0.35,
+    "color_soft": 0.035,
+    "color_hard": 0.13,
+    "luminance_weight": 0.25,
+    "region_radius_mm": 90.0
+  },
   "markers": {
     "dictionary": "DICT_4X4_50",
     "seed_radius_mm": 12.0,

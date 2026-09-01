@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autodeck-app"
-version = "0.4.2"
-description = "AutoDeck v0.4.2: click-to-open review app -- scan preview, outlines, teak and auto-fit drawn over the mesh"
+version = "5.0.0"
+description = "AutoDeck v5: review app -- textured scan preview, outlines, auto-fit, seams and sheet nesting"
 requires-python = ">=3.12"
 dependencies = [
   "flask>=3.0,<4",
