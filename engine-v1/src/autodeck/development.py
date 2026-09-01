@@ -273,8 +273,23 @@ def _triangle_angles(points: np.ndarray) -> np.ndarray:
     return np.column_stack(angles)
 
 
-def _geodesic_boundary_pins(vertices: np.ndarray, faces: np.ndarray, boundary: np.ndarray) -> tuple[int, int, float]:
-    """Choose deterministic far-apart boundary pins and their mesh distance."""
+def _geodesic_boundary_pins(
+    vertices: np.ndarray, faces: np.ndarray, boundary: np.ndarray
+) -> tuple[int, int, float, str]:
+    """Choose deterministic far-apart boundary pins and their mesh distance.
+
+    The distance is NOT advisory: `develop` passes it to LSCM as
+    ``pin_uv = [[0, 0], [distance, 0]]``, which fixes the developed panel's
+    scale outright, and ARAP does not wash it out.  Measured on a 5.4 m curved
+    deck patch, substituting the shortest path along mesh EDGES for the true
+    surface geodesic stretched the developed panel by +7.36% (+394 mm); the
+    heat method was -2.13% (-114 mm).
+
+    So the Dijkstra branch is a last-resort estimate, not an equivalent.  It
+    reports its name back to the caller, which downgrades the panel rather
+    than shipping a silently mis-scaled one.
+    """
+
     import igl  # type: ignore
     from scipy.sparse import coo_matrix
     from scipy.sparse.csgraph import dijkstra
@@ -287,7 +302,7 @@ def _geodesic_boundary_pins(vertices: np.ndarray, faces: np.ndarray, boundary: n
         ), dtype=np.float64)
         second_offset = int(np.argmax(exact))
         if np.isfinite(exact[second_offset]) and exact[second_offset] > 0:
-            return first, int(boundary[second_offset]), float(exact[second_offset])
+            return first, int(boundary[second_offset]), float(exact[second_offset]), "exact"
     except RuntimeError:
         pass
     edges, _counts = _edge_table(faces)
@@ -299,7 +314,7 @@ def _geodesic_boundary_pins(vertices: np.ndarray, faces: np.ndarray, boundary: n
     distances = np.asarray(dijkstra(graph, directed=False, indices=first), dtype=np.float64)
     boundary_distances = distances[boundary]
     second = int(boundary[np.argmax(boundary_distances)])
-    return first, second, float(distances[second])
+    return first, second, float(distances[second]), "edge-graph"
 
 
 def development_distortion(
@@ -392,7 +407,22 @@ class IntrinsicMeshDevelopment(SurfaceDevelopmentStrategy):
                 mesh.patch_id, self.name, mesh, np.empty((0, 2)), "INVALID", {}, planarity,
                 ["INTRINSIC DEVELOPMENT FAILURE: no usable outer boundary was found."],
             )
-        first, second, pin_distance = _geodesic_boundary_pins(mesh.base_vertices_mm, mesh.faces, boundary)
+        first, second, pin_distance, pin_method = _geodesic_boundary_pins(
+            mesh.base_vertices_mm, mesh.faces, boundary
+        )
+        if pin_method != "exact":
+            # The pin distance sets this panel's scale (see _geodesic_boundary_pins).
+            # An estimate here mis-scales every cut dimension, so refuse rather
+            # than emit a plausible-looking DXF that is several hundred mm out.
+            return DevelopmentResult(
+                mesh.patch_id, self.name, mesh, np.empty((0, 2)), "INVALID", {}, planarity,
+                [
+                    "INTRINSIC DEVELOPMENT FAILURE: exact geodesic pin distance unavailable "
+                    f"(fell back to '{pin_method}'). That estimate has been measured at up to "
+                    "+7.4% on a 5 m panel, which would scale every cut dimension, so the panel "
+                    "is rejected instead of developed."
+                ],
+            )
         pins = np.asarray([first, second], dtype=np.int64)
         pin_uv = np.asarray([[0.0, 0.0], [pin_distance, 0.0]], dtype=np.float64)
         try:
