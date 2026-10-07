@@ -1,4 +1,4 @@
-# AutoDeck2
+# AutoDeck2 — the engine behind AutoDeck 5.3
 
 Scan in → a Rhino file with the **raw** detected deck outline to draw on →
 your hand-drawn lines/arcs back in → validated `final.dxf` for VCarve plus
@@ -17,10 +17,9 @@ through one adapter (`autodeck2/v1compat.py`). It never copies or edits v1.
 ## Run it
 
 This engine has no launcher of its own any more. Use the AutoDeck UI
-(`AutoDeck.bat` / `AutoDeck.command` one level up), or run the wizard from the
-shared environment: `.venvScriptspython -m autodeck2`. Then:
-(Windows). First launch creates `.venv` and installs everything (internet
-once). Then:
+(`AutoDeck.bat` / `AutoDeck.command` one level up), which creates the shared
+`.venv` on its first run, or start the wizard from that same environment:
+`.venv\Scripts\python -m autodeck2`. Then:
 
 ```
 [1] Make a raw outline from a scan

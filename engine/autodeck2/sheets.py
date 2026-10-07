@@ -66,6 +66,15 @@ DEFAULTS: dict[str, Any] = {
     # Nesting search granularity.
     "nest_step_mm": 5.0,
     "allow_180_rotation": True,
+    # How hard the automatic seam finder tries to make the pieces LOOK right:
+    # a port and a starboard piece that visibly match, pieces that nearly fill
+    # their own bounding box, and cuts that run off the console walls instead
+    # of 40 mm to one side of them.  0.0 is pure waste, which is how the button
+    # behaved before this setting existed; 1.0 will trade a lot of material for
+    # tidy pieces.  It can never add a sheet and can never put a piece outside
+    # the envelope -- both of those are ordered ahead of it and are not for
+    # sale at any weight.  `seamplan` is where it is spent.
+    "seam_tidiness_weight": 0.35,
     # Grain direction. None = use the boat axis detected for the pattern frame.
     # A number overrides it: the angle in degrees, in the placed frame, of the
     # direction that must run along the 80 inch sheet dimension.  The override
@@ -73,6 +82,17 @@ DEFAULTS: dict[str, Any] = {
     # and cutting a directional material against the grain ruins the sheet.
     "grain_angle_deg": None,
 }
+
+# Everything that decides how a roughly drawn seam is straightened lives in
+# `seamsnap`, but it is the same job and the user sets it in the same place, so
+# the snap keys join the sheet keys here: one config["sheets"] block overrides
+# the sheet size, the seam gap AND the snapping, and `settings()` resolves the
+# lot in one call.  seamsnap deliberately does not import this module at import
+# time (see the note beside its own imports), so this direction of the
+# dependency is the only one, and the import order cannot decide the outcome.
+from . import seamsnap as _seamsnap  # noqa: E402  (must follow DEFAULTS)
+
+DEFAULTS.update(_seamsnap.SNAP_DEFAULTS)
 
 
 def settings(config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -82,6 +102,27 @@ def settings(config: dict[str, Any] | None = None) -> dict[str, Any]:
         raise ValueError("sheets.max_part_width_mm exceeds sheet_width_mm")
     if merged["max_part_length_mm"] > merged["sheet_length_mm"]:
         raise ValueError("sheets.max_part_length_mm exceeds sheet_length_mm")
+    # A seam cuts by having its kerf SUBTRACTED from the panel, so a gap of
+    # zero subtracts a zero-width rectangle and the panel comes back in one
+    # piece.  Every seam on the job then silently does nothing: `split_panel`
+    # returns the whole panel, the optimiser searches an arrangement that can
+    # never be cut, and the user gets a 2058 x 3994 mm "piece" with no
+    # explanation.  Measured on the cached boat -- at 6 mm the deck cuts into
+    # ten pieces, at 1e-12 mm into eleven, and at exactly 0 into one.  A
+    # negative gap is the same failure with a sign on it.  There is no useful
+    # zero-gap job (two pieces that touch are one piece), so this is refused
+    # here, once, rather than defended against in five places downstream.
+    if float(merged["seam_gap_mm"]) <= 0.0:
+        raise ValueError(
+            f"sheets.seam_gap_mm must be greater than zero (got {merged['seam_gap_mm']}); "
+            "a seam with no gap removes no material and so does not cut the panel at all"
+        )
+    weight = float(merged["seam_tidiness_weight"])
+    if not 0.0 <= weight <= 1.0:
+        raise ValueError(
+            f"sheets.seam_tidiness_weight must be between 0.0 and 1.0 (got {weight})"
+        )
+    merged["seam_tidiness_weight"] = weight
     return merged
 
 
@@ -266,14 +307,71 @@ def loop_polygon(outer: Loop, holes: Sequence[Loop], step_mm: float) -> Polygon:
 # seams
 
 
+_FALSE_WORDS = frozenset({"false", "no", "off", "0", ""})
+_TRUE_WORDS = frozenset({"true", "yes", "on", "1"})
+
+
+def _as_flag(value: Any, default: bool = True) -> bool:
+    """A yes/no field out of JSON, reading the words the way a person means them.
+
+    `bool("false")` is True, and every JSON encoder that stringifies its values
+    -- a hand-written curl, an older client, a form post -- can put that word
+    here.  Taking it at face value inverts the answer, so the words are read as
+    words and anything genuinely unrecognisable falls back to `default` rather
+    than to whichever way Python happens to lean.
+    """
+
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        word = value.strip().lower()
+        if word in _FALSE_WORDS:
+            return False
+        if word in _TRUE_WORDS:
+            return True
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
+
+
 @dataclass
 class Seam:
-    """A straight seam the user drew, in the placed frame.
+    """A straight seam the user placed, in the placed frame.
 
     `panel_id` of None means "wherever it crosses", which is what a user
     dragging a line across the whole flat layout means.  The segment is
     extended past the panel before cutting so a roughly drawn line still
     separates the panel cleanly -- the user was told to draw seams "roughly".
+
+    `x1..y2` are the seam AS IT WILL BE CUT: straightened to the boat.  The
+    other three fields are what makes that repeatable rather than a one-way
+    edit of the user's drawing.
+
+    `raw` is the line exactly as the user put it down, and every straightening
+    is recomputed from `raw` -- never from an already-straightened line.  Snap a
+    snapped seam and it must not creep: correcting from the corrected line would
+    compound whatever the last correction did, and a hundred re-plans would walk
+    the seam off the deck.  None means the seam predates this field, in which
+    case its current coordinates ARE the drawing.
+
+    `mode` records what the user ASKED FOR rather than only what they got:
+
+        "along"  bow to stern, exactly parallel to the centreline and the planks
+        "across" exactly ninety degrees to it, side to side
+        "angle"  `angle_deg` degrees off the centreline
+        ""       dragged as two free points, direction taken from the drawing
+
+    Storing the intent matters because the boat's axis can move afterwards --
+    the user sets a manual grain angle, or re-runs the pattern.  A seam placed
+    "across the boat" then has to stay exactly across the boat, so its direction
+    is recomputed from whatever axis the job is now using, instead of being
+    frozen at the coordinates it happened to be given the first time.
+
+    `snap` is the per-seam opt out: False leaves the seam exactly where it was
+    put, for the one join the fabricator wants to place by eye.
     """
 
     seam_id: str
@@ -282,19 +380,69 @@ class Seam:
     x2: float
     y2: float
     panel_id: int | None = None
+    snap: bool = True
+    raw: tuple[float, float, float, float] | None = None
+    mode: str = ""
+    angle_deg: float | None = None
+
+    @property
+    def drawn(self) -> tuple[float, float, float, float]:
+        """The line the correction starts from: `raw` when the seam has one,
+        and its own coordinates when it does not (an older seams.json, or a
+        seam that has never been through the corrector)."""
+
+        if self.raw is None:
+            return float(self.x1), float(self.y1), float(self.x2), float(self.y2)
+        x1, y1, x2, y2 = self.raw
+        return float(x1), float(y1), float(x2), float(y2)
 
     def to_dict(self) -> dict[str, Any]:
         return {"seam_id": self.seam_id, "x1": self.x1, "y1": self.y1,
-                "x2": self.x2, "y2": self.y2, "panel_id": self.panel_id}
+                "x2": self.x2, "y2": self.y2, "panel_id": self.panel_id,
+                "snap": bool(self.snap),
+                "raw": None if self.raw is None else [float(v) for v in self.raw],
+                "mode": self.mode, "angle_deg": self.angle_deg}
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "Seam":
+        """Tolerant of every seams.json ever written: the four new fields are
+        all optional, and a file from before they existed reads back as a
+        snapping, free-direction seam whose drawing is its own geometry.
+
+        Tolerant, but not credulous: `snap` goes through `_as_flag` rather than
+        `bool()`, because the string "false" is a true Python value and reading
+        it as "yes, straighten this seam" would do the exact opposite of what
+        the caller asked for -- silently, to the one seam the fabricator wanted
+        left where they put it.
+        """
+
+        raw = payload.get("raw")
+        if raw is not None:
+            values = [float(v) for v in raw]
+            if len(values) != 4:
+                raise ValueError("seam raw must be [x1, y1, x2, y2]")
+            raw = (values[0], values[1], values[2], values[3])
+        mode = str(payload.get("mode") or "")
+        if mode not in ("", "along", "across", "angle"):
+            raise ValueError(f"unknown seam mode {mode!r}; expected along, across, angle or blank")
+        angle = payload.get("angle_deg")
         return cls(
             seam_id=str(payload.get("seam_id") or ""),
             x1=float(payload["x1"]), y1=float(payload["y1"]),
             x2=float(payload["x2"]), y2=float(payload["y2"]),
             panel_id=None if payload.get("panel_id") in (None, "") else int(payload["panel_id"]),
+            snap=_as_flag(payload.get("snap"), default=True),
+            raw=raw, mode=mode,
+            angle_deg=None if angle in (None, "") else float(angle),
         )
+
+    def moved_to(self, x1: float, y1: float, x2: float, y2: float) -> "Seam":
+        """The same seam at new endpoints, with everything that says where it
+        came from carried across unchanged."""
+
+        return Seam(seam_id=self.seam_id, x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2),
+                    panel_id=self.panel_id, snap=self.snap, raw=self.drawn,
+                    mode=self.mode, angle_deg=self.angle_deg)
 
     def extended(self, distance_mm: float) -> LineString:
         p0 = np.array([self.x1, self.y1], dtype=float)
@@ -316,6 +464,25 @@ def read_seams(run_dir: Path) -> list[Seam]:
 
 
 def write_seams(run_dir: Path, seams: Sequence[Seam]) -> Path:
+    """Replace the run's seam list.
+
+    Written IN PLACE, deliberately, and not through the write-a-temp-file-then-
+    rename dance that would make it atomic.  Measured on this platform: with
+    three threads reading the file while it is rewritten four thousand times,
+    `Path.replace` onto the live name fails 3921 times out of 4000, because
+    Windows will not rename over a file another handle has open and Python does
+    not open for reading with delete sharing.  Trading a reader that sometimes
+    sees half a file for a WRITER that almost always fails is much the worse
+    bargain: the write is the user's seam edit, and losing it loses their work.
+
+    The one reader that really can arrive mid-write is the seam hover, which
+    runs on every pointer move; `bridge.seam_references` catches the parse error
+    and keeps its previous list for that one frame.  Everything else that reads
+    this file -- Export and the seam search -- is held off by the page while a
+    re-plan is in flight, which is the same guard that stops them cutting the
+    previous seam set.
+    """
+
     path = Path(run_dir) / "seams.json"
     path.write_text(json.dumps({"seams": [s.to_dict() for s in seams]}, indent=2), encoding="utf-8")
     return path
@@ -493,6 +660,29 @@ def oriented_extent(piece: Piece, rotation: np.ndarray, step_mm: float) -> tuple
 _PANEL_SUFFIX = "__PANEL_"
 
 
+def _encloses_area(vertices: np.ndarray) -> bool:
+    """Does this LWPOLYLINE bound an area, so that it is a part or a cut-out?
+
+    Three straight vertices is the obvious floor, and it used to be the only
+    test -- which silently threw away every circle in the file.  A DXF circle
+    written as a polyline is TWO vertices carrying bulge +-1, i.e. two
+    semicircles, and that is what the fitter emits for a round part and for a
+    round cut-out.  Dropping them lost a whole 187 mm circular panel out of the
+    cut files with no warning, and left a 207 mm cut-out un-cut in the middle of
+    another part.  So a two-vertex loop counts, provided both ends really are
+    bowed: two straight vertices are a line and enclose nothing.
+    """
+
+    count = len(vertices)
+    if count >= 3:
+        return True
+    if count != 2:
+        return False
+    bulges = np.abs(np.asarray(vertices, dtype=float)[:, 2])
+    chord = float(np.hypot(*(vertices[1][:2] - vertices[0][:2])))
+    return bool(bulges.min() > 1e-9 and chord > 1e-9)
+
+
 def read_fitted_dxf(path: Path) -> tuple[dict[int, list[Loop]], dict[int, list[np.ndarray]], str | None]:
     """CAM loops and pattern groove lines per panel from final_auto.dxf /
     final.dxf.  Bulges are read through unchanged: this is exactly the
@@ -514,7 +704,7 @@ def read_fitted_dxf(path: Path) -> tuple[dict[int, list[Loop]], dict[int, list[n
             continue
         if entity.dxftype() == "LWPOLYLINE" and not layer.startswith("PATTERN_"):
             vertices = np.asarray([(x, y, b) for x, y, b in entity.get_points("xyb")], dtype=float)
-            if len(vertices) >= 3:
+            if _encloses_area(vertices):
                 loops.setdefault(pid, []).append(Loop(vertices))
         elif entity.dxftype() == "LINE" and layer.startswith("PATTERN_"):
             if kind is None:
