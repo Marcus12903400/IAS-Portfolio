@@ -3,19 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AutoDeck 5</title>
+<title>AutoDeck 5.3</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
-  <div class="brand">AutoDeck <span>5.0</span></div>
+  <div class="brand">AutoDeck <span>5.3</span></div>
   <div id="status-bar" class="status">Ready</div>
 </header>
 
 <div id="layout">
   <aside id="left">
+    <!-- Steps 1 to 3 are done once per boat and then never touched again, while
+         step 4 is the whole of the day's work. Left open they made this column
+         four screens deep, so the seam list and the "does it all fit yet" line
+         were above the fold exactly when seams were being placed. Each folds
+         itself away as soon as it has produced what the next step needs, with
+         a one-line summary of what it did, and any of them can be opened again
+         by hand -- a step reopened by hand stays open. -->
     <section>
-      <h2>1 · Scan</h2>
+      <details class="step" id="step-scan" open>
+      <summary><h2>1 · Scan</h2><span class="step-state" id="step-state-scan"></span></summary>
       <div id="dropzone">
         Drop an <b>.obj</b> scan here<br>or <label class="link">choose a file<input type="file" id="file-input" accept=".obj"></label>
       </div>
@@ -23,18 +31,20 @@
         <button id="btn-pick" class="secondary">Browse for an .obj…</button>
         <button id="btn-pick-folder" class="secondary">Open a scan folder…</button>
       </div>
-      <div class="hint">A scan folder brings the .mtl and texture images with it, so the deck shows with its real surface.</div>
+      <div class="hint">A scan folder brings the texture images with it, so the deck shows with its real surface.</div>
       <div id="scan-info" class="info muted">No scan loaded</div>
+      </details>
     </section>
 
     <section>
-      <h2>2 · Outline</h2>
+      <details class="step" id="step-outline" open>
+      <summary><h2>2 · Outline</h2><span class="step-state" id="step-state-outline"></span></summary>
       <div class="row">
         <label>Units <select id="opt-units">
           <option value="auto">auto</option><option value="mm">mm</option><option value="cm">cm</option>
           <option value="m">m</option><option value="in">in</option></select></label>
-        <label>Layout <select id="opt-layout">
-          <option value="nest">nest</option><option value="boat-plan">boat-plan</option></select></label>
+        <label>Panels <select id="opt-layout">
+          <option value="nest">side by side</option><option value="boat-plan">as they sit in the boat</option></select></label>
       </div>
       <div class="row">
         <label>Pattern <select id="opt-pattern">
@@ -46,34 +56,101 @@
       </div>
       <div class="hint" id="pattern-hint">Teak: spacing on centre.</div>
       <button id="btn-outline" disabled>Run outline</button>
-      <div class="hint">Finds the deck, truly unrolls each panel (angled panels keep their real size — nothing is squashed onto a flat plane) and draws the raw wall line, obstacles, seams and the pattern. A new scan takes a few minutes; it is cached afterwards.</div>
+      <div class="hint">Finds the deck and unrolls each panel at its true size — an angled panel keeps its real measurements. The pattern also works out which way the boat runs, and that is what every seam is later squared to. A new scan takes a few minutes, then it is cached.</div>
+      </details>
     </section>
 
     <section>
-      <h2>3 · Auto-fit</h2>
+      <details class="step" id="step-autofit" open>
+      <summary><h2>3 · Auto-fit</h2><span class="step-state" id="step-state-autofit"></span></summary>
       <button id="btn-autofit" disabled>Run auto-fit</button>
-      <div class="hint">Straight lines first, then the biggest tangent arcs that fit. The outline is kept 1.5 mm inside the detected border and only ever simplifies inward — slightly small fits the boat, slightly big does not. Writes final_auto.dxf.</div>
+      <div class="hint">Turns the scanned edge into clean lines and arcs, kept 1.5 mm inside the deck so a part is never cut oversize. Writes final_auto.dxf.</div>
       <h3>Ingest a drawn .3dm</h3>
       <div class="row">
         <input type="file" id="ingest-input" accept=".3dm">
         <button id="btn-ingest" class="secondary" disabled>Ingest</button>
       </div>
+      <div class="hint">Only if you drew the outline yourself in Rhino. Auto-fit does this for you.</div>
+      </details>
     </section>
 
     <section>
       <h2>4 · Seams &amp; sheets</h2>
-      <div class="row">
-        <label>Piece gap <input type="number" id="opt-spacing" min="0" max="200" step="1" value="20" style="width:60px"> mm</label>
-        <label>Seam gap <input type="number" id="opt-seamgap" min="0" max="50" step="0.5" value="6" style="width:56px"> mm</label>
+
+      <h3>Place a seam</h3>
+      <label class="stack">Direction
+        <select id="seam-dir-side">
+          <option value="along">Vertical — along the boat (bow to stern)</option>
+          <option value="across">Horizontal — across the boat</option>
+          <option value="angle">Diagonal — at an angle</option>
+        </select>
+      </label>
+      <div class="row" id="seam-angle-row-side" hidden>
+        <label>Angle <input type="number" id="seam-angle-side" min="0" max="180" step="1" value="45" style="width:62px"> ° off the boat centreline</label>
       </div>
-      <div class="row">
-        <label>Grain angle <input type="number" id="opt-grain" step="0.5" placeholder="auto" style="width:64px"> °</label>
-        <label class="check"><input type="checkbox" id="opt-rot180" checked> allow 180°</label>
-      </div>
-      <div class="hint" id="grain-hint">The 80″ sheet dimension runs along the boat. Blank uses the detected boat axis.</div>
+      <button id="btn-seam" class="secondary">Place seam</button>
+      <div class="hint" id="seam-hint">Pick a direction, press Place seam, then hover the deck and click where the join goes.</div>
+      <div id="boat-axis-note" class="info" hidden></div>
+
+      <h3>Seams on this deck</h3>
+      <!-- Where the seams under this line came from. The seam search replaces
+           the whole set, and with nothing saying so a hand-placed layout reads
+           exactly like the machine's answer -- oversize pieces and all. -->
+      <div id="seam-source" class="info muted" hidden></div>
       <div id="seam-list" class="info muted">No seams yet</div>
+      <!-- A save that did not happen. The edit above it is kept either way. -->
+      <div id="seam-trouble" class="info bad-note" hidden></div>
+      <div id="seam-tally" class="info muted" hidden></div>
+      <div class="row">
+        <button id="btn-replan" class="secondary small">Recalculate</button>
+        <!-- Taking seams away is the way OUT of a layout that has gone wrong,
+             so nothing about the sheet plan may ever disable this: see
+             setReplanBusy in app.js. -->
+        <button id="btn-clear-seams" class="secondary small" disabled>Clear all seams</button>
+      </div>
+      <!-- What Clear all seams took away, and the undo that puts it back. Beside
+           the button that did it, not under the next heading down. -->
+      <div id="clear-result" class="info" hidden></div>
+      <div class="hint">The pieces and the sheets are worked out again after every change on their own, so Recalculate is only here for when you want to see it done again. Clear all seams asks first, and there is an Undo straight afterwards.</div>
+
+      <h3>Let the computer try</h3>
+      <button id="btn-optimise" class="secondary" disabled>Find the best seam layout</button>
+      <div class="hint">Puts the seams where every piece fits a sheet and the least material is wasted, with the fewest joins it can. It searches for about a minute and a half and keeps the best it found — not a proof that nothing better exists. Your seams are saved first and there is an Undo; you can still move or remove any of them afterwards.</div>
+      <div id="optimise-result" class="info" hidden></div>
+
+      <h3>Cut files</h3>
       <button id="btn-sheets" disabled>Export sheet DXFs</button>
-      <div class="hint">Seams split each panel with a 6 mm gap; pieces are nested on 40×80″ sheets, rotated 0° or 180° only so the grain stays along the boat.</div>
+      <div class="hint">One DXF per 40×80″ sheet, ready for VCarve, with the grain running along the boat.</div>
+
+      <details id="seam-settings">
+        <summary>Settings</summary>
+        <div class="settings-body">
+          <div class="hint">Set these once. The defaults suit Reflex TruGrain on 40×80″ sheets.</div>
+
+          <h4>Straightening</h4>
+          <label class="check"><input type="checkbox" id="opt-axis-priority" checked> Straighten seams to the boat</label>
+          <div class="hint">Long seams run with the boat and the teak lines, short ones square across it, so no piece comes out wedge shaped.</div>
+          <div class="row">
+            <label>Straighten anything within <input type="number" id="opt-axis-snap" min="1" max="45" step="1" value="20" style="width:56px"> °</label>
+          </div>
+          <label class="check"><input type="checkbox" id="opt-snap-enabled" checked> Line seams up with nearby edges</label>
+          <div class="row">
+            <label>within <input type="number" id="opt-snap-angle" min="0.5" max="45" step="0.5" value="5" style="width:56px"> ° of the edge</label>
+          </div>
+          <div class="hint">For a diagonal seam: if it is nearly along a console or hatch edge, put it on that edge. A seam straightened to the boat still slides sideways onto an edge that is already square.</div>
+
+          <h4>Nesting</h4>
+          <div class="row">
+            <label>Piece gap <input type="number" id="opt-spacing" min="0" max="200" step="1" value="20" style="width:60px"> mm</label>
+            <label>Seam gap <input type="number" id="opt-seamgap" min="0" max="50" step="0.5" value="6" style="width:56px"> mm</label>
+          </div>
+          <div class="row">
+            <label>Grain angle <input type="number" id="opt-grain" min="-360" max="360" step="0.5" placeholder="auto" style="width:64px"> °</label>
+            <label class="check"><input type="checkbox" id="opt-rot180" checked> allow 180°</label>
+          </div>
+          <div class="hint">Leave the grain angle blank to use the boat direction the outline found. Typing one overrules it, and every seam is squared to that instead.</div>
+        </div>
+      </details>
     </section>
 
     <section>
@@ -82,25 +159,47 @@
     </section>
 
     <section>
-      <h2>Previous runs</h2>
+      <details class="step" id="step-runs" open>
+      <summary><h2>Previous runs</h2><span class="step-state" id="step-state-runs"></span></summary>
       <div id="runs" class="runs"></div>
+      </details>
     </section>
   </aside>
 
   <main id="center">
     <div id="tabs">
       <button data-tab="3d" class="active">3D over the mesh</button>
-      <button data-tab="flat">Flat layout &amp; seams</button>
+      <button data-tab="flat">Seams &amp; flat layout</button>
       <button data-tab="sheets">Sheet layout</button>
     </div>
     <div id="view3d">
-      <canvas id="gl"></canvas>
-      <div id="view3d-empty" class="empty">Load a scan to see it here</div>
+      <div class="viewtools">
+        <select id="seam-dir-3d">
+          <option value="along">Vertical — along the boat (bow to stern)</option>
+          <option value="across">Horizontal — across the boat</option>
+          <option value="angle">Diagonal — at an angle</option>
+        </select>
+        <label class="tool-angle" id="seam-angle-row-3d" hidden>Angle
+          <input type="number" id="seam-angle-3d" min="0" max="180" step="1" value="45"> °</label>
+        <button id="btn-seam-3d" class="secondary">Place seam</button>
+        <span class="hint inline" id="seam-hint-3d">Pick a direction, press Place seam, then hover the deck and click where the join goes.</span>
+      </div>
+      <div class="viewbody">
+        <canvas id="gl"></canvas>
+        <div id="view3d-empty" class="empty">Load a scan to see it here</div>
+      </div>
     </div>
     <div id="viewflat" hidden>
       <div class="viewtools">
-        <button id="btn-seam" class="secondary">✎ Draw a seam</button>
-        <span class="hint inline" id="seam-hint">Drag a line where a join should go. Drag an end to move it.</span>
+        <select id="seam-dir-flat">
+          <option value="along">Vertical — along the boat (bow to stern)</option>
+          <option value="across">Horizontal — across the boat</option>
+          <option value="angle">Diagonal — at an angle</option>
+        </select>
+        <label class="tool-angle" id="seam-angle-row-flat" hidden>Angle
+          <input type="number" id="seam-angle-flat" min="0" max="180" step="1" value="45"> °</label>
+        <button id="btn-seam-flat" class="secondary">Place seam</button>
+        <span class="hint inline" id="seam-hint-flat">Pick a direction, press Place seam, then hover the deck and click where the join goes.</span>
       </div>
       <div class="viewbody">
         <svg id="flat" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -109,8 +208,16 @@
     </div>
     <div id="viewsheets" hidden>
       <div class="viewtools">
+        <!-- The same "where did these seams come from" line as the seam list
+             carries, so the two tabs plainly agree about which set is on
+             screen. -->
+        <span id="sheets-source" class="tool-tag" hidden></span>
         <span id="sheets-head" class="hint inline">Run auto-fit first — sheets are cut from the fitted outline.</span>
       </div>
+      <!-- Which pieces will not fit and by how much, on the tab where the
+           sheets are: a piece missing off a sheet is not something to go back
+           to the other column to read about. -->
+      <div id="sheets-notes" class="viewnotes" hidden></div>
       <div class="viewbody">
         <svg id="sheets" xmlns="http://www.w3.org/2000/svg"></svg>
         <div id="sheets-empty" class="empty">Run auto-fit to lay pieces out on sheets</div>
@@ -119,6 +226,10 @@
   </main>
 
   <aside id="right">
+    <!-- Everything above the Progress log scrolls; the log itself is pinned to
+         the bottom of the column, because it is the only thing telling the user
+         what a long job is doing and it used to fall below the fold. -->
+    <div id="right-scroll">
     <section>
       <h2>Layers</h2>
       <div id="layers" class="muted">No run open</div>
@@ -134,12 +245,13 @@
       <label class="check"><input type="checkbox" id="opt-xray"> Show lines through the mesh</label>
       <label class="check">Mesh opacity <input type="range" id="opt-opacity" min="0.15" max="1" step="0.05" value="1"></label>
       <button id="btn-fit" class="secondary">Fit view</button>
-      <div class="hint">Flat shading with a low light height rakes the surface so creases and dents show; Slope darkens the walls; Height colors by elevation.</div>
+      <div class="hint">Flat shading with the light height low rakes across the surface, so creases and dents show up.</div>
     </section>
     <section>
-      <h2>Panels · flattening</h2>
+      <h2>Panel check</h2>
       <div id="panel-quality" class="info muted">No run open</div>
     </section>
+    </div>
     <section id="log-section">
       <h2>Progress</h2>
       <pre id="log"></pre>

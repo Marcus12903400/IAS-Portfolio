@@ -14,16 +14,43 @@ header { display: flex; align-items: center; justify-content: space-between; hei
 
 #layout { display: grid; grid-template-columns: 300px 1fr 300px; height: calc(100% - 46px); }
 aside { overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 8px 12px 24px; }
-#right { border-right: none; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+/* The right column is two parts, and only the top one scrolls. The Progress log
+   is the only live feedback the ninety-second seam search has, and while it was
+   simply the third section of a scrolling column it sat 180 px BELOW the bottom
+   of a 1366x768 window: the button says "it searches for about a minute and a
+   half" and the thing it asks you to watch was off screen unless you knew to
+   scroll. Pinned to the bottom it is always there, whatever the layer list
+   above it grows to. */
+#right { border-right: none; border-left: 1px solid var(--line); display: flex; flex-direction: column;
+  overflow: hidden; padding: 0; }
+#right-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; }
+#right-scroll section:last-child { border-bottom: none; }
 section { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
 section:last-child { border-bottom: none; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 0 0 8px; }
+/* A step that folds itself away once it is done. The heading IS the summary, so
+   a shut step is exactly one line tall and the column still reads as the same
+   numbered sequence it always did. */
+details.step > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
+details.step > summary::-webkit-details-marker { display: none; }
+details.step > summary::before { content: "▸"; color: var(--muted); font-size: 11px; line-height: 1; }
+details.step[open] > summary::before { content: "▾"; }
+details.step > summary h2 { margin: 0 0 0; }
+details.step > summary:hover h2 { color: var(--text); }
+details.step[open] > summary { margin-bottom: 8px; }
+.step-state { font-size: 11.5px; color: var(--muted); margin-left: auto; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-state.done { color: var(--ok); }
 h3 { font-size: 13px; margin: 12px 0 6px; }
 button { font: inherit; padding: 8px 12px; border-radius: 7px; border: 1px solid var(--accent-dark); background: var(--accent); color: #fff; cursor: pointer; width: 100%; margin-top: 6px; }
 button:hover { background: var(--accent-dark); }
 button:disabled { background: #c7c7cc; border-color: #c7c7cc; cursor: default; }
 button.secondary { background: #fff; color: var(--text); border-color: var(--line); }
 button.secondary:hover { background: #f0f0f3; }
+/* For a control that is there when wanted rather than one to press: Recalculate
+   happens on its own after every edit, so a full-width button beside the seam
+   list read as a step of the job that it is not. */
+button.small { width: auto; padding: 4px 10px; font-size: 12.5px; }
 select, input[type=file] { font: inherit; }
 select { padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line); background: #fff; }
 .row { display: flex; gap: 10px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
@@ -51,11 +78,18 @@ label.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 #tabs button { width: auto; margin: 0; border: none; border-radius: 0; background: transparent; color: var(--muted); padding: 10px 18px; border-bottom: 2px solid transparent; }
 #tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 #view3d, #viewflat, #viewsheets { position: relative; flex: 1; min-height: 0; }
-#viewflat, #viewsheets { display: flex; flex-direction: column; }
+#view3d, #viewflat, #viewsheets { display: flex; flex-direction: column; }
 /* An explicit `display` beats the hidden attribute's UA default, so the tab
    switcher would otherwise leave both views stacked. Restore hidden's meaning. */
-#viewflat[hidden], #viewsheets[hidden] { display: none; }
-#gl { width: 100%; height: 100%; display: block; }
+#view3d[hidden], #viewflat[hidden], #viewsheets[hidden] { display: none; }
+/* The same trap, everywhere else: this page hides several things with the
+   hidden attribute (the angle box, the auto-layout result) and every one of
+   them sits inside a rule that sets `display`. One guard for the lot, so a new
+   `display` rule added later cannot bring the stacked-views bug back. */
+[hidden] { display: none !important; }
+/* Absolute inside .viewbody so the canvas fills what is left under the toolbar
+   and never adds its own height to the column. */
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* An <svg> with a viewBox has an intrinsic aspect ratio and will grow past its
    flex parent, pushing tall sheet layouts below the fold. Pinning it to a
    positioned wrapper makes the viewport authoritative and lets
@@ -64,22 +98,89 @@ label.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 #flat, #sheets { position: absolute; inset: 0; width: 100%; height: 100%;
   display: block; background: #14171c; }
 
-/* toolbar above the flat / sheet views */
-.viewtools { display: flex; align-items: center; gap: 12px; padding: 6px 12px;
-  background: #1b1f26; border-bottom: 1px solid #2a2f38; flex: none; }
+/* toolbar above every view */
+.viewtools { display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+  background: #1b1f26; border-bottom: 1px solid #2a2f38; flex: none; flex-wrap: wrap; }
 .viewtools button { width: auto; margin: 0; padding: 5px 11px; font-size: 13px; }
 .viewtools button.active { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+.viewtools select { max-width: 260px; font-size: 13px; }
+.viewtools .tool-angle { display: flex; align-items: center; gap: 5px; color: #9aa0aa; font-size: 13px; }
+.viewtools .tool-angle input { width: 58px; }
+/* The hint is the only part that may shrink, so a long "1 240 mm on panel 1"
+   never pushes the chooser or the button off the end of the bar. */
+.viewtools .hint.inline { flex: 1 1 120px; min-width: 0; }
 .hint.inline { margin-top: 0; color: #9aa0aa; }
+/* Which seam set the sheets below were laid out from, said on the sheet tab
+   itself. It keeps its own width -- it is the one thing on this bar that must
+   not be shortened into "6 seams from the…". */
+.tool-tag { flex: none; font-size: 12.5px; color: #e6e8ec; background: #2a2f38;
+  border-radius: 5px; padding: 3px 8px; white-space: nowrap; }
+.tool-tag[hidden] { display: none; }
+/* A bar under the toolbar for what will not fit. Dark like the toolbar, because
+   it belongs to the view and not to the drawing, and scrollable rather than
+   endless, because a deck with eight oversize pieces must not push the sheets
+   themselves off the bottom of the window. */
+.viewnotes { flex: none; max-height: 26%; overflow-y: auto; padding: 7px 12px;
+  background: #241a1c; border-bottom: 1px solid #46292d; color: #ffb3ad; font-size: 12.5px;
+  line-height: 1.4; }
+.viewnotes[hidden] { display: none; }
+.viewnotes .note { color: #d29a97; font-size: 11.5px; }
+.viewnotes b { color: #fff; }
+/* A label with its control on the next line, full width: the direction names
+   carry the boat meaning ("along the boat, bow to stern") and a 300 px panel
+   truncates them to nothing on one line. */
+.stack { display: block; margin: 6px 0; }
+.stack select { display: block; width: 100%; margin-top: 3px; }
+
+/* Set-once tuning, folded out of the way. Eight controls sitting in the middle
+   of section 4 made the four things a person actually does there impossible to
+   pick out, and not one of them is touched twice on a job. A plain <details>
+   keeps it shut with no JavaScript, so nothing can leave it half open. */
+#seam-settings { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 6px; }
+#seam-settings > summary { cursor: pointer; padding: 4px 0; font-size: 12.5px; color: var(--muted);
+  list-style: none; user-select: none; }
+#seam-settings > summary::-webkit-details-marker { display: none; }
+#seam-settings > summary::before { content: "\25B8\00A0"; }
+#seam-settings[open] > summary::before { content: "\25BE\00A0"; }
+#seam-settings > summary:hover { color: var(--text); }
+.settings-body { border-left: 2px solid var(--line); padding: 2px 0 6px 10px; }
+.settings-body h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--muted); font-weight: 600; margin: 14px 0 4px; }
+.settings-body h4:first-of-type { margin-top: 10px; }
 
 /* seams drawn over the flat layout */
-#flat.drawing { cursor: crosshair; }
+#flat.placing, #gl.placing { cursor: crosshair; }
 .seam { stroke: #ff375f; stroke-dasharray: 14 9; stroke-linecap: round; fill: none;
   vector-effect: non-scaling-stroke; }
-.seam-handle { fill: #ff375f; stroke: #ffffff; stroke-width: 1; cursor: grab;
+/* Drawn under every seam so the dashed red line still reads where it lies along
+   the plank lines, which is where the long seams always lie. */
+.seam-casing { stroke: #0d1116; stroke-opacity: 0.75; stroke-linecap: round; fill: none;
   vector-effect: non-scaling-stroke; }
-.seam-handle:hover { fill: #ffffff; stroke: #ff375f; }
+/* The seam that WOULD be placed under the pointer: solid and amber, so it
+   reads as the live one against the committed dashed red seams. */
+.seam-preview { stroke: #ff9f0a; stroke-linecap: round; fill: none;
+  vector-effect: non-scaling-stroke; pointer-events: none; }
 .seam-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
 .seam-row span { flex: 1; }
+.seam-item .note { color: var(--muted); font-size: 11.5px; padding-left: 2px; }
+.seam-row .as-placed { flex: none; color: var(--muted); font-size: 11.5px; gap: 4px; margin: 0; }
+.seam-item { border-bottom: 1px solid var(--line); padding: 2px 0 4px; }
+.seam-item:last-child { border-bottom: none; }
+.bad-note { color: var(--bad); }
+.warn-note { color: #b06f00; }
+/* One piece that will not fit: its name and size on the first line, what is
+   wrong and what would fix it on the second. Run together on one line the
+   fabricator had to parse it before they could act on it. */
+.oversize { padding: 3px 0 1px; }
+.oversize + .oversize { border-top: 1px solid rgba(255, 59, 48, 0.25); }
+.oversize .note { color: inherit; opacity: 0.85; font-size: 11.5px; }
+/* The two small buttons under the seam list sit side by side; the row would
+   otherwise give them the 6 px top margin every button carries. */
+.row > button.small { margin-top: 0; }
+
+/* the bow / stern marks on the seam view -- family and weight only, so the
+   font-size attribute that scales them with the view still applies */
+.boat-mark { font-family: var(--font); font-weight: 700; fill: #ffd60a; }
 .linkbtn { width: auto; margin: 0; padding: 2px 6px; font-size: 12px; background: transparent;
   color: var(--accent); border: none; text-decoration: underline; cursor: pointer; }
 .linkbtn:hover { background: transparent; color: var(--accent-dark); }
@@ -89,15 +190,30 @@ label.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 .sheet-usable { fill: none; stroke: #c6cad1; stroke-dasharray: 10 8; vector-effect: non-scaling-stroke; }
 .sheet-piece { fill: #d6e7fa; stroke: #0a5abe; vector-effect: non-scaling-stroke; }
 .sheet-piece:hover { fill: #b9d8f7; }
+/* A cut-out, filled with the sheet's own white so the bare material shows
+   through it, and outlined thinly in a lighter blue so it still reads as a cut
+   line rather than as a second, smaller part nested inside the first. */
+.sheet-hole { fill: #ffffff; stroke: #4a8fd8; vector-effect: non-scaling-stroke; }
 .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9a9fa8; pointer-events: none; font-size: 15px; }
 .empty[hidden] { display: none; }
 
 #layers .layer { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
 #layers .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
 #layers .count { margin-left: auto; color: var(--muted); font-size: 11.5px; }
-#log-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-#log { flex: 1; margin: 0; overflow: auto; background: #1c1c1e; color: #d1d1d6; padding: 8px; border-radius: 7px; font-size: 11.5px; line-height: 1.4; white-space: pre-wrap; min-height: 160px; }
+/* Never shrinks and never scrolls out of the window: see #right above. */
+#log-section { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0;
+  padding: 8px 12px 12px; border-top: 1px solid var(--line); border-bottom: none; background: var(--panel); }
+#log { flex: 0 0 auto; margin: 0; overflow: auto; background: #1c1c1e; color: #d1d1d6; padding: 8px; border-radius: 7px; font-size: 11.5px; line-height: 1.4; white-space: pre-wrap; height: 24vh; min-height: 120px; max-height: 300px; }
 #log .err { color: #ff6b60; }
 
-.flat-label { font: 12px var(--font); fill: #c9cdd4; }
+/* Family only, no size: the size is a font-size attribute worked out from how
+   far the view is zoomed out, and the `font` shorthand used to overrule it
+   (a stylesheet beats a presentation attribute), which left every panel label
+   a couple of screen pixels tall. */
+/* The halo is not decoration: a plain #c9cdd4 label sat on top of the bright
+   green pattern lines and could not be read at all. paint-order draws the dark
+   stroke first and the fill over it, so the letters keep their shape. */
+.flat-label { font-family: var(--font); fill: #e6e9ee; font-weight: 600;
+  stroke: #14171c; stroke-width: 3px; stroke-opacity: 0.85; paint-order: stroke fill;
+  vector-effect: non-scaling-stroke; }
 input[type=number] { font: inherit; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line); background: #fff; }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import subprocess
 import sys
@@ -18,7 +19,11 @@ from .jobs import JobManager
 STATIC = Path(__file__).parent / "static"
 SAFE_FILES = {"outline.3dm", "outline.dxf", "auto_cam.3dm", "final_auto.dxf", "final.dxf", "outline_report.md",
               "autofit_report.md", "final_report.md", "calibration_report.md", "run.json", "autofit.json", "panels.json",
-              "sheets.json", "sheet_report.md", "seams.json"}
+              "sheets.json", "sheet_report.md", "seams.json",
+              # The copy the seam optimiser takes before it replaces anything.
+              # It has to be downloadable or a hand-placed seam set that the
+              # button improved on cannot be got back.
+              "seams_previous.json"}
 _SHEET_DXF = re.compile(r"^sheet_\d{2,3}\.dxf$")
 _PICKER = (
     "import tkinter as tk, tkinter.filedialog as fd\n"
@@ -30,6 +35,202 @@ _FOLDER_PICKER = (
     "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)\n"
     "print(fd.askdirectory(title='Choose a scan folder (OBJ + MTL + textures)'))\n"
 )
+
+
+# Every sheet setting the page may override, with the range that is worth
+# cutting with.  The upper bounds are not fussiness: `seam_snap_max_move_mm` is
+# the guard that stops a snap teleporting a seam, `seam_gap_mm` is a real gap
+# between two real pieces, and a number a thousand times too big in either
+# silently produces a wrong cut file rather than an error.
+_SHEET_NUMBERS: dict[str, tuple[float, float]] = {
+    "part_spacing_mm": (0.0, 500.0),
+    "seam_gap_mm": (0.0, 100.0),
+    "nest_step_mm": (0.5, 200.0),
+    # A direction, so any angle is legal; outside a turn it is a typo.
+    "grain_angle_deg": (-360.0, 360.0),
+    # How far off square a seam may be drawn and still be taken as meant to be
+    # square. The two masters are ninety degrees apart, so no seam is ever more
+    # than forty-five from the NEARER of them: at forty-five every seam is
+    # already claimed, and a bigger number cannot reach further -- it could only
+    # be read as reaching past the halfway line to the wrong master, which is
+    # how "60" here used to turn an almost-across seam into an along-boat one.
+    "seam_axis_snap_deg": (0.0, 45.0),
+    "seam_snap_angle_deg": (0.0, 90.0),
+    "seam_snap_offset_mm": (0.0, 1000.0),
+    "seam_snap_reach_mm": (0.0, 10000.0),
+    "seam_snap_min_ref_length_mm": (0.0, 1000.0),
+    "seam_snap_min_ref_radius_mm": (0.0, 1000.0),
+    "seam_snap_max_move_mm": (0.0, 1000.0),
+}
+
+_SHEET_FLAGS = ("allow_180_rotation", "seam_snap_enabled", "seam_axis_priority",
+                "seam_snap_use_axis")
+
+# Enough points for a whole drag path in one call, and few enough that a stray
+# request cannot make the server chew through a megabyte of picks.
+MAX_PICK_POINTS = 64
+
+# A deck this program has ever seen has under a dozen seams, and the seam list
+# is written straight to seams.json.  Ten thousand of them took twenty-five
+# seconds and left a 2.8 MB file behind, which is not a seam set, it is a stuck
+# client.
+MAX_SEAMS = 500
+
+# Nothing on any real boat is a kilometre from the origin, and a coordinate that
+# is (or is a NaN, or an infinity) reaches the geometry as a number no rule can
+# reject and comes back out as the bare token NaN in seams.json -- which is not
+# JSON, so every later read of that run fails in the browser and the page cannot
+# even write the file back to repair it.  Caught here, once, before anything
+# stores it.
+MAX_SEAM_COORDINATE_MM = 1e6
+
+_TRUE = {"true", "1", "yes", "on"}
+_FALSE = {"false", "0", "no", "off"}
+
+
+def _as_number(name: str, value: Any) -> float:
+    """A finite float, or a 400 saying which field was wrong.
+
+    `bool` is rejected even though Python would happily float() it: a checkbox
+    arriving where a millimetre belongs is a bug in the caller, and silently
+    reading it as 1 mm would be worse than saying so.
+    """
+
+    if isinstance(value, bool) or isinstance(value, (list, dict)):
+        abort(400, f"{name} must be a number")
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        abort(400, f"{name} must be a number")
+    if not math.isfinite(number):
+        abort(400, f"{name} must be a real number")
+    return number
+
+
+def _as_flag(name: str, value: Any) -> bool:
+    """A real yes/no.
+
+    Plain bool() is not usable here: bool("false") is True, so a checkbox sent
+    as a string would turn snapping ON when the user turned it off.
+    """
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        if value.strip().lower() in _TRUE:
+            return True
+        if value.strip().lower() in _FALSE:
+            return False
+    abort(400, f"{name} must be true or false")
+
+
+def _as_points(value: Any, width: int, name: str, single: bool = False) -> list[list[float]]:
+    """A list of xy or xyz points, checked before any of it reaches numpy.
+
+    numpy would turn a ragged list into an object array and fail somewhere deep
+    with a 500; the caller gets a sentence naming the field instead.
+    """
+
+    if single:
+        value = [value]
+    if not isinstance(value, (list, tuple)) or not value:
+        abort(400, f"{name} must be a non-empty list of {width}-number points")
+    if len(value) > MAX_PICK_POINTS:
+        abort(400, f"{name} is limited to {MAX_PICK_POINTS} points per call")
+    points: list[list[float]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, (list, tuple)) or len(item) != width:
+            abort(400, f"{name}[{index}] must be {width} numbers")
+        points.append([_as_number(f"{name}[{index}]", coordinate) for coordinate in item])
+    return points
+
+
+def checked_seams(value: Any) -> list[dict[str, Any]]:
+    """The posted seam list, with every coordinate proved to be a real number.
+
+    This endpoint writes what it is given straight to seams.json, so a coordinate
+    that is not a finite number does not merely produce a bad seam: `json.dump`
+    writes the bare token `NaN`, which is not valid JSON, and from then on the
+    page cannot read the run at all -- not even to write a repaired file back.
+    The run has to be fixed by hand in a text editor.  One check here is the
+    difference between a 400 and a bricked job.
+    """
+
+    if not isinstance(value, list):
+        abort(400, "seams must be a list")
+    if len(value) > MAX_SEAMS:
+        abort(400, f"that is {len(value)} seams; {MAX_SEAMS} is the most one deck may have")
+    for index, seam in enumerate(value):
+        if not isinstance(seam, dict):
+            abort(400, f"seams[{index}] must be an object")
+        for key in ("x1", "y1", "x2", "y2"):
+            if key not in seam:
+                abort(400, f"seams[{index}] is missing {key}")
+            number = _as_number(f"seams[{index}].{key}", seam[key])
+            if abs(number) > MAX_SEAM_COORDINATE_MM:
+                abort(400, f"seams[{index}].{key} is {number:g} mm, which is off the boat")
+        raw = seam.get("raw")
+        if raw is None:
+            continue
+        # `raw` is the line the user drew, and every later correction is
+        # recomputed from it -- so it reaches the file just as surely as the
+        # endpoints do and needs exactly the same guard.
+        if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+            abort(400, f"seams[{index}].raw must be four numbers")
+        for position, coordinate in enumerate(raw):
+            number = _as_number(f"seams[{index}].raw[{position}]", coordinate)
+            if abs(number) > MAX_SEAM_COORDINATE_MM:
+                abort(400, f"seams[{index}].raw[{position}] is {number:g} mm, which is off the boat")
+    return value
+
+
+def body(request_obj: Any) -> dict[str, Any]:
+    """The request's JSON as an object, whatever arrived.
+
+    A JSON array, string, number or `true` is truthy, so `get_json() or {}` let
+    it straight through to `.get(...)` and every POST answered a hostile body
+    with a 500 and a traceback instead of a sentence.
+    """
+
+    data = request_obj.get_json(silent=True)
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        abort(400, "the request body must be a JSON object")
+    return data
+
+
+def sheet_options(data: dict[str, Any]) -> dict[str, Any]:
+    """Per-request overrides for the sheet settings the page exposes.
+
+    Every value is range checked here rather than deeper down, because a number
+    that is merely absurd -- a 400 mm seam gap, a snap allowed to teleport a seam
+    a hundred metres -- does not raise anywhere: it produces a plausible looking
+    cut file that is wrong.  Anything unusable is a 400 naming the field, never a
+    500 out of the geometry.
+
+    A key sent as null or "" means "leave it at the default", which is how the
+    page clears the manual grain angle; a key sent as a word is a 400.
+
+    Module level, not a closure inside `create_app`, so the whole validation
+    table can be tested without standing a server up and opening a run.
+    """
+
+    overrides: dict[str, Any] = {}
+    for key, (low, high) in _SHEET_NUMBERS.items():
+        if data.get(key) in (None, ""):
+            continue
+        value = _as_number(key, data[key])
+        if not low <= value <= high:
+            abort(400, f"{key} must be between {low:g} and {high:g}")
+        overrides[key] = value
+    for key in _SHEET_FLAGS:
+        if data.get(key) is None:
+            continue
+        overrides[key] = _as_flag(key, data[key])
+    return overrides
 
 
 def resolve_scan_folder(folder: Path) -> Path:
@@ -85,6 +286,12 @@ def create_app() -> Flask:
         overlays = bridge.overlays(view, log)
         with lock:
             state.update(run_id=run_dir.name, view=view, overlays=overlays)
+        # Built here, while a progress log is on screen, rather than on the first
+        # pointer move: the search tree for a full-resolution deck panel takes
+        # about a second, and paying for it during the seam hover would freeze
+        # the pointer exactly when the user is trying to aim a seam.
+        log("Preparing the deck for picking and seam placement")
+        bridge.warm_picking(view)
         log(f"Run {run_dir.name} ready: {len(overlays['layers'])} layers")
         return overlays
 
@@ -153,7 +360,7 @@ def create_app() -> Flask:
     @app.post("/api/scan/path")
     def api_scan_path():
         busy_guard()
-        data = request.get_json(silent=True) or {}
+        data = body(request)
         path = Path(str(data.get("path", ""))).expanduser()
         if path.is_dir():
             path = resolve_scan_folder(path)
@@ -165,7 +372,7 @@ def create_app() -> Flask:
     @app.post("/api/scan/pick")
     def api_scan_pick():
         busy_guard()
-        folder = (request.get_json(silent=True) or {}).get("folder")
+        folder = body(request).get("folder")
         script = _FOLDER_PICKER if folder else _PICKER
         try:
             proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=900)
@@ -223,7 +430,7 @@ def create_app() -> Flask:
     @app.post("/api/run/open")
     def api_run_open():
         busy_guard()
-        data = request.get_json(silent=True) or {}
+        data = body(request)
         run_id = str(data.get("run_id", ""))
         run_dir = settings.RUNS_DIR / run_id
         if not run_id or not (run_dir / "run.json").is_file():
@@ -245,7 +452,7 @@ def create_app() -> Flask:
         scan = state["scan"]
         if scan is None:
             abort(400, "load a scan first")
-        data = request.get_json(silent=True) or {}
+        data = body(request)
         units = str(data.get("units", "auto"))
         layout_mode = str(data.get("layout", "nest"))
         pattern = str(data.get("pattern", "teak")).lower()
@@ -301,42 +508,88 @@ def create_app() -> Flask:
         return jsonify({"job_id": job.job_id})
 
     # ------------------------------------------------------------------ sheets
-    def sheet_options(data: dict[str, Any]) -> dict[str, Any]:
-        """Per-request overrides for the sheet settings the page exposes."""
-
-        overrides: dict[str, Any] = {}
-        for key, cast in (("part_spacing_mm", float), ("seam_gap_mm", float),
-                          ("grain_angle_deg", float), ("nest_step_mm", float)):
-            if data.get(key) not in (None, ""):
-                try:
-                    overrides[key] = cast(data[key])
-                except (TypeError, ValueError):
-                    abort(400, f"{key} must be a number")
-        if data.get("allow_180_rotation") is not None:
-            overrides["allow_180_rotation"] = bool(data["allow_180_rotation"])
-        return overrides
-
     @app.get("/api/sheets")
     def api_sheets():
         """The current seams and, if geometry exists, the nested sheet layout."""
 
         run_dir = current_run_dir()
-        result = bridge.sheet_preview(run_dir, {})
+        result = bridge.sheet_preview(run_dir, {}, view=state["view"])
         return jsonify(result)
 
     @app.post("/api/sheets/seams")
     def api_sheets_seams():
-        """Replace the seam set and re-plan. Cheap enough to call on every edit."""
+        """Replace the seam set and re-plan. Cheap enough to call on every edit.
+
+        Every coordinate is proved to be a real number BEFORE anything is
+        planned, because this endpoint writes what it is given straight to
+        seams.json -- see `checked_seams`.  That check is the difference between
+        a 400 and a run the page can never open again.
+        """
 
         run_dir = current_run_dir()
-        data = request.get_json(silent=True) or {}
-        seams = data.get("seams")
-        if not isinstance(seams, list):
-            abort(400, "seams must be a list")
+        data = body(request)
+        seams = checked_seams(data.get("seams"))
         try:
-            result = bridge.sheet_preview(run_dir, sheet_options(data), seams=seams, save=True)
+            result = bridge.sheet_preview(run_dir, sheet_options(data), seams=seams,
+                                          save=True, view=state["view"])
         except (ValueError, KeyError, TypeError) as exc:
             abort(400, f"bad seam data: {exc}")
+        return jsonify(result)
+
+    @app.post("/api/pick")
+    def api_pick():
+        """World xyz from the 3D view -> the same points in the flat layout.
+
+        The 3D half of the seam tool: three.js reports where the pointer met the
+        model, and a seam has to be stored in the frame the cut is made in.
+        `panel_id` comes back None for a point that is not on any deck, so the
+        page can say "that is not on the deck" instead of dropping a seam
+        somewhere wrong.
+        """
+
+        view = state["view"]
+        if view is None:
+            abort(400, "no run is open")
+        data = body(request)
+        points = _as_points(data.get("points"), 3, "points")
+        return jsonify({"picks": bridge.pick_flat(view, points)})
+
+    @app.post("/api/seam/hover")
+    def api_seam_hover():
+        """The seam that WOULD be placed under the pointer, trimmed to the part.
+
+        Called on every pointer move, so it does as little as it can: the panel
+        polygons and the resolved boat frame are cached on the open run, and only
+        the clip and the lift happen per call.
+        """
+
+        view = state["view"]
+        if view is None:
+            abort(400, "no run is open")
+        data = body(request)
+        mode = str(data.get("mode") or "across").lower()
+        if mode not in ("along", "across", "angle"):
+            abort(400, "mode must be along, across or angle")
+        angle = None
+        if mode == "angle":
+            if data.get("angle_deg") in (None, ""):
+                abort(400, "angle_deg is required for a diagonal seam")
+            angle = _as_number("angle_deg", data["angle_deg"])
+            if not -360.0 <= angle <= 360.0:
+                abort(400, "angle_deg must be between -360 and 360")
+        flat = world = None
+        if data.get("point_flat") is not None:
+            flat = _as_points(data["point_flat"], 2, "point_flat", single=True)
+        elif data.get("point_world") is not None:
+            world = _as_points(data["point_world"], 3, "point_world", single=True)
+        else:
+            abort(400, "send point_flat [x, y] or point_world [x, y, z]")
+        try:
+            result = bridge.seam_hover(view, sheet_options(data), mode, angle,
+                                       point_flat=flat, point_world=world,
+                                       with_world=data.get("world", True) is not False)
+        except (ValueError, KeyError, TypeError) as exc:
+            abort(400, f"bad hover request: {exc}")
         return jsonify(result)
 
     @app.post("/api/sheets/export")
@@ -345,13 +598,44 @@ def create_app() -> Flask:
 
         busy_guard()
         run_dir = current_run_dir()
-        data = request.get_json(silent=True) or {}
+        data = body(request)
         options = sheet_options(data)
 
         def fn(log):
             return bridge.job_sheets(run_dir, options, log)
 
         job = jobs.start("sheets", fn, {"run_id": run_dir.name})
+        return jsonify({"job_id": job.job_id})
+
+    @app.post("/api/seams/optimise")
+    def api_seams_optimise():
+        """Work out the best seam positions for this run, on its own.
+
+        A long job with a live log, started the same way as auto-fit and the
+        sheet export, because it takes a minute or so and the page has to stay
+        usable while it runs.  It copies the seams that are there to
+        seams_previous.json before it writes anything, and writes nothing at all
+        unless what it found is better than what is there -- see
+        `bridge.job_optimise_seams`.
+        """
+
+        busy_guard()
+        run_dir = current_run_dir()
+        data = body(request)
+        options = sheet_options(data)
+        budget = bridge.OPTIMISE_BUDGET_S
+        if data.get("time_budget_s") not in (None, ""):
+            budget = _as_number("time_budget_s", data["time_budget_s"])
+            # Under five seconds it cannot look at more than the first
+            # arrangement it builds, and ten minutes is longer than anyone will
+            # sit in front of it.
+            if not 5.0 <= budget <= 600.0:
+                abort(400, "time_budget_s must be between 5 and 600 seconds")
+
+        def fn(log):
+            return bridge.job_optimise_seams(run_dir, options, log, time_budget_s=budget)
+
+        job = jobs.start("optimise_seams", fn, {"run_id": run_dir.name})
         return jsonify({"job_id": job.job_id})
 
     @app.get("/api/overlays")

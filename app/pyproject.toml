@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autodeck-app"
-version = "5.0.0"
+version = "5.3.0"
 description = "AutoDeck v5: review app -- textured scan preview, outlines, auto-fit, seams and sheet nesting"
 requires-python = ">=3.12"
 dependencies = [

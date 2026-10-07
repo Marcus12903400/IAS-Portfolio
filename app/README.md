@@ -1,21 +1,47 @@
-# AutoDeck v5 — the review app
+# AutoDeck 5.3 — the review app
 
 Double-click to open. Drop in a 3D scan, see it in 3D, run the outline /
 pattern / auto-fit stages and see every result drawn **over the mesh** and in
 the **flat panel layout**. Download `final_auto.dxf` for VCarve, per-sheet DXFs
 for the nested pieces, or `outline.3dm` to draw on in Rhino and ingest back.
 
-New in v5:
+New in 5.3 — the seam work:
+
+- **Seams are placed by direction, not by dragging.** Pick **Vertical** (along
+  the boat, bow to stern), **Horizontal** (across it) or **Diagonal** and type
+  the angle off the centreline; press **Place seam**; move the pointer over the
+  deck. The seam you would get is drawn live — trimmed to the panel's fitted
+  edges, broken around cut-outs, with its length and panel named — and a click
+  locks it in. The mode stays armed so seams can be placed one after another,
+  and Escape stops. Works over the 3D boat and over the flat layout.
+- **Every seam is squared to the boat.** The direction the pattern stage
+  measured is the master reference: a long seam ends up exactly parallel to the
+  centreline and therefore to the teak lines, a short one exactly 90° to it, all
+  the way through to the piece edges in the sheet DXF. A seam placed by hovering
+  is exact by construction; an older or hand-drawn one is straightened onto the
+  nearer master if it is within 20° of it, and only then allowed to slide
+  sideways onto a fitted edge that runs the same way. Each seam's row says what
+  was done to it in plain words.
+- **The seam tab is drawn bow up**, with the panels moved back to where they sit
+  in the boat rather than nested for cutting, and the ends marked ▲ BOW and
+  STERN. If which end is the bow is only a guess, it says so.
+- **Find the best seam layout** — one button that works the seams out for you:
+  full-width cuts along and across the boat, ranked on zero oversize pieces,
+  then fewest sheets, then least waste, then fewest joins. The winner is
+  re-checked with the exact production pipeline before any number is shown, and
+  it reports "best found", never "optimal". Your seams are copied aside first
+  and there is an Undo.
+- **Seams & flat layout** — each seam splits the panel leaving a 6 mm gap
+  between neighbouring pieces, and the fitted arcs survive the cut instead of
+  being flattened to polylines.
+
+From v5:
 
 - **Open a scan folder** — the `.obj`, its `.mtl` and the texture images come in
   together, and the deck is shown with its real photographic surface under a new
   *Texture (scan photo)* shading mode. The colour also feeds the deck-edge
   detection as extra evidence; the root README explains how that is kept from
   making a good geometric result worse.
-- **Seams** — on *Flat layout & seams*, press **Draw a seam** and drag a line
-  where a join should go; drag either end to move it. Each seam splits the panel
-  leaving a 6 mm gap between neighbouring pieces, and the fitted arcs survive the
-  cut instead of being flattened to polylines.
 - **Sheet layout** — a third tab nesting the pieces onto 40 × 80 inch sheets with
   the grain along the boat (0° or 180° rotation only), a minimum piece gap you
   can set, and one `sheet_NN.dxf` per sheet for VCarve.
