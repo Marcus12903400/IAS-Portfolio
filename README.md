@@ -1,5 +1,8 @@
 # AutoDeck 5.3
 
+> Working on this with an AI assistant? Start with **`HANDOFF_FOR_NEXT_AI.md`** (full
+> project handoff, 2026-10-07) and `docs/seam-audit-2026-10-07.md` (the open defects).
+
 Scan in → deck outline, pattern and auto-fit CAM geometry out, reviewed in a
 browser and downloaded as DXF for VCarve.
 

@@ -1,5 +1,11 @@
 # START_HERE_AI.md — AutoDeck
 
+> **Update 2026-10-07:** the project now lives at `D:\AutoDeck`, is pushed to
+> <https://github.com/Marcus12903400/IAS-Portfolio> (branch `main`), and the full,
+> current handoff for the next AI is **`HANDOFF_FOR_NEXT_AI.md`**. Read that first; this
+> file is the 2026-09-02 snapshot it builds on (paths and the uncommitted-work warnings
+> below are out of date).
+
 **Read this entire file before you touch anything.** It was written for an AI
 assistant picking this project up on a different machine and a different Claude
 account, with no memory of how it got here.
