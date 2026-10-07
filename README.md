@@ -1,7 +1,10 @@
-# AutoDeck
+# AutoDeck 5.3
 
 Scan in → deck outline, pattern and auto-fit CAM geometry out, reviewed in a
 browser and downloaded as DXF for VCarve.
+
+The page you open says **AutoDeck 5.3** in the tab and in the top-left corner.
+If it says anything else, an older copy is still running on that port.
 
 ## Open it
 
@@ -34,7 +37,7 @@ AutoDeck.bat        Windows: double-click this            <- the button
 AutoDeck.command    macOS: double-click this
 AutoDeck.app        macOS: same thing, as an app icon
 
-app/                v5 review UI - the browser app you see
+app/                AutoDeck 5.3 review UI - the browser app you see
 engine/             AutoDeck2: outline, patterns, auto-fit, ingest
 engine-v1/          AutoDeck v1: the analysis engine engine/ runs on
 
@@ -57,11 +60,17 @@ installed system-wide beyond Python itself.
    line, obstacles, seams and pattern over the mesh.
 3. **Auto-fit** — lines first, then the biggest tangent arcs that fit. Writes
    `final_auto.dxf` and `auto_cam.3dm`.
-4. **Seams & sheets** — on *Flat layout & seams*, press **Draw a seam** and drag
-   a line where a join should go; drag either end to move it. Each seam splits
-   the panel leaving a 6 mm gap between neighbouring pieces. The *Sheet layout*
-   tab nests the pieces onto 40 × 80 inch sheets and **Export sheet DXFs**
-   writes one `sheet_NN.dxf` per sheet for VCarve.
+4. **Seams & sheets** — pick a **Direction** (Vertical along the boat,
+   Horizontal across it, or Diagonal at an angle you type), press **Place
+   seam**, then move the pointer over the deck. The seam you would get is drawn
+   live, trimmed to the panel edges and broken around cut-outs, with its length
+   and panel named. Click to lock it in; the tool stays armed for the next one,
+   and Escape stops. It works on the 3D boat and on the flat layout, and the
+   flat layout is turned **bow up** so the deck reads the way it sits in the
+   water. Each seam splits the panel leaving a 6 mm gap between neighbouring
+   pieces. **Find the best seam layout** works the seams out for you — see
+   below. The *Sheet layout* tab nests the pieces onto 40 × 80 inch sheets and
+   **Export sheet DXFs** writes one `sheet_NN.dxf` per sheet for VCarve.
 5. **Files** — download `final_auto.dxf` for VCarve, the per-sheet DXFs, or
    `outline.3dm` to draw on in Rhino and ingest back.
 
@@ -88,6 +97,41 @@ wrong, type the angle in.
 
 Anything still too big for a sheet after seams is listed by name with how much
 it is over and which way another seam is needed.
+
+### The boat direction is what everything is squared to
+
+One direction is measured once, when the outline runs with a pattern, and it is
+then used for three things: the plank lines are drawn along it, the 80 inch
+sheet dimension runs along it, and every seam is squared to it. So a **long
+seam is exactly parallel to the teak lines** and a **short seam is exactly 90°
+to them**, right through to the piece edges in the sheet DXF — no piece comes
+out wedge shaped.
+
+A seam placed with the direction chooser is exact from the moment it is drawn
+and needs no correcting. An older seam, or one placed at an angle, is
+straightened onto the nearer of those two directions if it is within 20° of it
+(Settings → *Straighten anything within __°*), and then allowed to slide
+sideways onto a fitted console or hatch edge that runs the same way. The seam
+list says in plain words what was done to each one.
+
+A run made with **Pattern: None** has no boat direction. The seam tool says so
+and refuses to guess, and **Find the best seam layout** is switched off, until
+you type a grain angle under Settings.
+
+### Find the best seam layout
+
+One button. It works out where the seams should go on its own — full-width cuts
+along and across the boat only, because that is what actually gets cut and
+because the material is directional — aiming for, in this order: every piece
+inside the 39 × 79 inch envelope, then the fewest sheets, then the least waste,
+then the fewest joins.
+
+It searches for about a minute and a half, then **re-checks the winner with the
+exact production pipeline** and reports that number, not the search's own
+estimate. It is a bounded search, so it reports "best found", never "optimal" —
+you can move or remove any seam it placed. The seams you had are copied to
+`seams_previous.json` first (older copies are kept as `seams_previous_1.json`
+and so on) and there is an **Undo** button beside the result.
 
 ## Texture
 

@@ -1,4 +1,4 @@
-<title>AutoDeck v5 Build Notes</title>
+<title>AutoDeck 5.3 Build Notes</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
   :root{
@@ -129,8 +129,8 @@
 
 <header class="top">
   <div class="col">
-    <p class="eyebrow">Overnight build &middot; 31 August 2026</p>
-    <h1>AutoDeck v5</h1>
+    <p class="eyebrow">Build notes &middot; v5, 31 August 2026 &middot; seams reworked for 5.3</p>
+    <h1>AutoDeck 5.3</h1>
     <p class="lede">Three things you asked for — more CPU, texture, and seams with sheet nesting — plus
     the reason nothing was opening in the first place, and four bugs found in the existing
     cut geometry along the way.</p>
@@ -279,9 +279,20 @@
   </dl>
 
   <div class="col">
-    <p>Draw a seam by dragging a line on the <em>Flat layout &amp; seams</em> tab; drag either end to
-    move it, and the sheets re-plan on every edit. The <em>Sheet layout</em> tab shows the nested
-    result, and <strong>Export sheet DXFs</strong> writes one <code>sheet_NN.dxf</code> per sheet.</p>
+    <p>Place a seam by choosing its direction first &mdash; <em>Vertical</em> along the boat,
+    <em>Horizontal</em> across it, or <em>Diagonal</em> at an angle you type &mdash; then hovering
+    the deck on either the 3D or the <em>Seams &amp; flat layout</em> tab. The seam that would be
+    placed is drawn live, trimmed to the panel's fitted edges and broken around cut-outs, and a
+    click locks it in. The sheets re-plan on every edit. The <em>Sheet layout</em> tab shows the
+    nested result, and <strong>Export sheet DXFs</strong> writes one <code>sheet_NN.dxf</code> per
+    sheet.</p>
+    <p><strong>The boat's own direction is what a seam is squared to</strong>, not the nearest
+    fitted edge: a long seam comes out exactly parallel to the centreline and therefore to the teak
+    lines, a short one exactly 90&deg; to it, all the way through to the piece edges on the sheet.
+    A seam placed by hovering is exact by construction and needs no correction at all. The seam tab
+    is drawn bow up, with the panels back where they sit in the boat, so the layout can be judged
+    by eye. <strong>Find the best seam layout</strong> works the whole set out on its own and
+    re-checks its answer with the exact production pipeline before reporting a number.</p>
     <p>Because TruGrain is directional, the whole job is rotated so the boat's long axis runs along
     the 2032 mm sheet dimension, after which nesting is ordinary bottom-left packing. 180&deg; is
     free — it keeps the grain and lets an L-shaped piece tuck into its neighbour's notch, which is
