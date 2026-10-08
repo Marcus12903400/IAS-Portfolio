@@ -268,7 +268,13 @@ def nest(pieces: Sequence[Piece], base_rotation: np.ndarray,
             moved = affinity.translate(polygon, -minx, -miny)
             variants[angle] = _Variant(moved, maxx - minx, maxy - miny, moved.bounds)
         piece_origins[piece.piece_id] = origins
-        if all(v.width > usable_w or v.length > usable_l for v in variants.values()):
+        # The same 1e-9 slack `_find_spot` gives the grid search: a piece
+        # exactly on the envelope (an exact 990.6 x 2006.6 rectangle on a
+        # rotated axis measures a few 1e-13 over, purely from the rotation's
+        # trigonometry) used to be refused here while the search would have
+        # placed it happily.
+        if all(v.width > usable_w + 1e-9 or v.length > usable_l + 1e-9
+               for v in variants.values()):
             unplaced.append(piece.piece_id)
             warnings.append(
                 f"piece {piece.piece_id} is {variants[0].width:.0f} x {variants[0].length:.0f} mm and does not fit "

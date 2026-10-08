@@ -152,10 +152,18 @@ def test_a_seams_json_written_before_any_of_this_still_reads():
 def test_a_real_old_seams_json_on_disk_reads_and_writes_back(tmp_path):
     if not (NO_AXIS_RUN / "seams.json").is_file():
         pytest.skip(f"cached run {NO_AXIS_RUN.name} is not present")
-    stored = json.loads((NO_AXIS_RUN / "seams.json").read_text(encoding="utf-8"))
+    # Pinned content (shared with test_nesting_speed) rather than the live
+    # seams.json: the live file is the app's to rewrite, and this test wants
+    # the OLD schema specifically -- the pre-5.3 four-field form.
+    from test_nesting_speed import PINNED_SEAMS
+
+    stored = {"seams": PINNED_SEAMS[NO_AXIS_RUN.name]}
     assert stored["seams"] and "raw" not in stored["seams"][0]
 
-    seams = sheets.read_seams(NO_AXIS_RUN)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "seams.json").write_text(json.dumps(stored, indent=2), encoding="utf-8")
+    seams = sheets.read_seams(source)
     sheets.write_seams(tmp_path, seams)
     again = sheets.read_seams(tmp_path)
 
@@ -641,9 +649,12 @@ def test_a_seam_placed_by_hovering_needs_no_correction_afterwards(axis_run):
         assert result.angle_change_deg == pytest.approx(0.0, abs=1e-9)
         master = seamsnap.master_directions(frame.axis)[0 if mode == "along" else 1]
         assert parallelism(seam_direction(cut), master) == pytest.approx(1.0, abs=1e-12)
-        # It may be slid sideways onto a square fitted edge -- that is the
-        # refinement doing its job -- but it may never be swung off square.
-        assert result.moved_mm <= opts["seam_snap_offset_mm"] + 1e-9
+        # The hover's settle is the SAME correction now (it runs through
+        # apply_snap against the same reference pool), so a seam placed by
+        # hovering needs no further movement at all -- it used to tolerate the
+        # full 25 mm slide here, which is exactly the click-time jump the
+        # fabricator saw between the preview and the cut.
+        assert result.moved_mm <= 1e-6
         assert cut.mode == mode and cut.raw is not None
 
 
@@ -925,8 +936,7 @@ def test_the_pick_and_hover_endpoints_refuse_politely_with_no_run_open():
     _server, app = flask_app()
     client = app.test_client()
 
-    for path, payload in (("/api/pick", {"points": [[0.0, 0.0, 0.0]]}),
-                          ("/api/seam/hover", {"mode": "across", "point_flat": [0.0, 0.0]}),
+    for path, payload in (("/api/seam/hover", {"mode": "across", "point_flat": [0.0, 0.0]}),
                           ("/api/sheets/seams", {"seams": []})):
         response = client.post(path, json=payload)
         assert response.status_code == 400, path

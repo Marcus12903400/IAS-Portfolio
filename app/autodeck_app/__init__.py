@@ -7,4 +7,4 @@ layout.  The engine itself is AutoDeck2 (`../engine`), which in turn uses
 AutoDeck v1; this package never copies either.
 """
 
-__version__ = "5.3.0"
+__version__ = "5.4.0"

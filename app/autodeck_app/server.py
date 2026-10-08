@@ -14,16 +14,21 @@ from typing import Any
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
 from . import __version__, bridge, meshview, settings
+from . import jobs as jobs_module
 from .jobs import JobManager
 
 STATIC = Path(__file__).parent / "static"
 SAFE_FILES = {"outline.3dm", "outline.dxf", "auto_cam.3dm", "final_auto.dxf", "final.dxf", "outline_report.md",
               "autofit_report.md", "final_report.md", "calibration_report.md", "run.json", "autofit.json", "panels.json",
               "sheets.json", "sheet_report.md", "seams.json",
-              # The copy the seam optimiser takes before it replaces anything.
-              # It has to be downloadable or a hand-placed seam set that the
-              # button improved on cannot be got back.
-              "seams_previous.json"}
+              # The copies the seam optimiser takes before it replaces anything.
+              # They have to be downloadable or a hand-placed seam set that the
+              # button improved on cannot be got back -- and that goes for the
+              # numbered older copies and the first hand-placed set exactly as
+              # much as for the newest one.
+              "seams_previous.json", "seams_hand.json"}
+# seams_previous_N.json -- the older backups, stepped aside by later presses.
+_SEAMS_BACKUP_FILE = re.compile(r"^seams_previous_\d{1,3}\.json$")
 _SHEET_DXF = re.compile(r"^sheet_\d{2,3}\.dxf$")
 _PICKER = (
     "import tkinter as tk, tkinter.filedialog as fd\n"
@@ -43,8 +48,16 @@ _FOLDER_PICKER = (
 # between two real pieces, and a number a thousand times too big in either
 # silently produces a wrong cut file rather than an error.
 _SHEET_NUMBERS: dict[str, tuple[float, float]] = {
-    "part_spacing_mm": (0.0, 500.0),
-    "seam_gap_mm": (0.0, 100.0),
+    # The piece gap floor is 1 mm rather than 0: the nester treats two touching
+    # pieces as a collision anyway, so a 0 the user can type is a number the
+    # program cannot honour and DXFs that quietly come out tighter than asked.
+    # The real floor is the router bit diameter plus clearance, which only the
+    # shop knows; 1 mm only stops the lie.
+    "part_spacing_mm": (1.0, 500.0),
+    # A seam gap below 2 mm is a kerf no blade and no router bit makes, and a
+    # 0 used to take the whole seam tool down with a 400 on every hover --
+    # including remove and Clear all, the two controls that must always work.
+    "seam_gap_mm": (2.0, 100.0),
     "nest_step_mm": (0.5, 200.0),
     # A direction, so any angle is legal; outside a turn it is a typo.
     "grain_angle_deg": (-360.0, 360.0),
@@ -147,8 +160,11 @@ def _as_points(value: Any, width: int, name: str, single: bool = False) -> list[
     return points
 
 
+_SEAM_MODES = ("", "along", "across", "angle")
+
+
 def checked_seams(value: Any) -> list[dict[str, Any]]:
-    """The posted seam list, with every coordinate proved to be a real number.
+    """The posted seam list, with every field proved fit to store.
 
     This endpoint writes what it is given straight to seams.json, so a coordinate
     that is not a finite number does not merely produce a bad seam: `json.dump`
@@ -156,21 +172,55 @@ def checked_seams(value: Any) -> list[dict[str, Any]]:
     page cannot read the run at all -- not even to write a repaired file back.
     The run has to be fixed by hand in a text editor.  One check here is the
     difference between a 400 and a bricked job.
+
+    The rest of the table is every way a bad row used to be stored and then
+    misbehaved downstream: a duplicate id let one seam overwrite another when a
+    reply was merged by id; a seam bound to a panel that does not exist cuts
+    nothing and confuses the corrector's panel filter; a zero-length seam is
+    dropped by everything downstream while still showing in the list; a word in
+    `snap` reads as true through `bool()`; and an angle that is not a number
+    breaks the hover for the seam's whole run.
     """
 
     if not isinstance(value, list):
         abort(400, "seams must be a list")
     if len(value) > MAX_SEAMS:
         abort(400, f"that is {len(value)} seams; {MAX_SEAMS} is the most one deck may have")
+    seen_ids: set[str] = set()
     for index, seam in enumerate(value):
         if not isinstance(seam, dict):
             abort(400, f"seams[{index}] must be an object")
+        seam_id = str(seam.get("seam_id") or "")
+        if seam_id:
+            if seam_id in seen_ids:
+                abort(400, f"seams[{index}] repeats seam_id {seam_id!r}; each seam needs its own name")
+            seen_ids.add(seam_id)
         for key in ("x1", "y1", "x2", "y2"):
             if key not in seam:
                 abort(400, f"seams[{index}] is missing {key}")
             number = _as_number(f"seams[{index}].{key}", seam[key])
             if abs(number) > MAX_SEAM_COORDINATE_MM:
                 abort(400, f"seams[{index}].{key} is {number:g} mm, which is off the boat")
+        if (float(seam["x1"]) == float(seam["x2"]) and float(seam["y1"]) == float(seam["y2"])):
+            abort(400, f"seams[{index}] has zero length -- a seam has to run somewhere")
+        if "panel_id" in seam and seam["panel_id"] not in (None, ""):
+            panel = seam["panel_id"]
+            if isinstance(panel, bool) or not isinstance(panel, (int, float)) or int(panel) != panel or int(panel) < 0:
+                abort(400, f"seams[{index}].panel_id must be a whole panel number")
+        if "snap" in seam and seam["snap"] is not None and not isinstance(seam["snap"], bool):
+            # The words are read by the FILE reader, which has to tolerate old
+            # files; a request from this page has no excuse and gets the 400.
+            if not (isinstance(seam["snap"], str) and seam["snap"].strip().lower() in _TRUE | _FALSE):
+                abort(400, f"seams[{index}].snap must be true or false")
+        mode = str(seam.get("mode") or "")
+        if mode not in _SEAM_MODES:
+            abort(400, f"seams[{index}].mode must be along, across, angle or empty")
+        if mode == "angle":
+            if seam.get("angle_deg") in (None, ""):
+                abort(400, f"seams[{index}] is an angle seam but carries no angle_deg")
+            _as_number(f"seams[{index}].angle_deg", seam["angle_deg"])
+        elif "angle_deg" in seam and seam["angle_deg"] not in (None, ""):
+            _as_number(f"seams[{index}].angle_deg", seam["angle_deg"])
         raw = seam.get("raw")
         if raw is None:
             continue
@@ -524,35 +574,32 @@ def create_app() -> Flask:
         planned, because this endpoint writes what it is given straight to
         seams.json -- see `checked_seams`.  That check is the difference between
         a 400 and a run the page can never open again.
+
+        Guarded like the other engine jobs: a re-plan races the optimiser for
+        the same seams.json, and an edit that lands mid-search used to lose the
+        very seams it edited (the search overwrote them from a copy taken
+        before the edit existed).  While a job runs, edits answer 409 and the
+        page holds them -- "removing seams always works" is about the plan
+        state, and the one thing it cannot mean is removing them into a file
+        another job is about to clobber.
+
+        `run_id` is echoed by the page so a re-plan queued before a run switch
+        cannot write the previous boat's seams into the new run.
         """
 
+        busy_guard()
         run_dir = current_run_dir()
         data = body(request)
         seams = checked_seams(data.get("seams"))
+        posted_run = data.get("run_id")
+        if posted_run and str(posted_run) != run_dir.name:
+            abort(400, f"that request was for run {posted_run}, but {run_dir.name} is the open run")
         try:
             result = bridge.sheet_preview(run_dir, sheet_options(data), seams=seams,
                                           save=True, view=state["view"])
         except (ValueError, KeyError, TypeError) as exc:
             abort(400, f"bad seam data: {exc}")
         return jsonify(result)
-
-    @app.post("/api/pick")
-    def api_pick():
-        """World xyz from the 3D view -> the same points in the flat layout.
-
-        The 3D half of the seam tool: three.js reports where the pointer met the
-        model, and a seam has to be stored in the frame the cut is made in.
-        `panel_id` comes back None for a point that is not on any deck, so the
-        page can say "that is not on the deck" instead of dropping a seam
-        somewhere wrong.
-        """
-
-        view = state["view"]
-        if view is None:
-            abort(400, "no run is open")
-        data = body(request)
-        points = _as_points(data.get("points"), 3, "points")
-        return jsonify({"picks": bridge.pick_flat(view, points)})
 
     @app.post("/api/seam/hover")
     def api_seam_hover():
@@ -650,7 +697,8 @@ def create_app() -> Flask:
         run_dir = settings.RUNS_DIR / run_id
         if (name not in SAFE_FILES
                 and not (name.startswith("autofit_panel") and name.endswith(".png"))
-                and not _SHEET_DXF.match(name)):
+                and not _SHEET_DXF.match(name)
+                and not _SEAMS_BACKUP_FILE.match(name)):
             abort(404)
         path = run_dir / name
         if not path.is_file() or ".." in run_id:
@@ -659,6 +707,13 @@ def create_app() -> Flask:
         if inline and name.endswith((".md", ".json")):
             return Response(path.read_text(encoding="utf-8"), mimetype="text/plain")
         return send_file(str(path), as_attachment=not inline, download_name=name)
+
+    @app.errorhandler(jobs_module.JobBusy)
+    def api_job_busy(error):
+        # `JobManager.start` refuses under its own lock when a job is already
+        # running; the pre-route guard and the start itself are two steps, and
+        # two requests arriving together could once slip between them.
+        return jsonify({"error": str(error)}), 409
 
     @app.errorhandler(400)
     @app.errorhandler(404)

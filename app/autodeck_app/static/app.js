@@ -25,6 +25,10 @@
     // Have this run's own seams actually arrived? Until they have, state.seams
     // being empty means "not known yet", not "there are none" -- see replanSheets.
     seamsLoaded: false,
+    // A seam placed before the run's own seams arrived: its re-plan waits
+    // here until they do, so it can never post a half-known list over a
+    // hand-placed layout.
+    seamsWait: false,
     // Bumped by every local edit to the seam list: place, remove, clear, "as
     // placed", undo. A reply that was asked for before the bump is an answer to
     // a question the page has stopped asking, and adopting its seam list
@@ -815,7 +819,9 @@
     const sheets = (data.preview.sheets || []).length;
     const pieces = data.piece_count || 0;
     const over = data.oversize || [];
-    el.className = "info " + (over.length ? "bad-note" : "muted");
+    const refused = data.refused || [];
+    const warnings = (data.warnings || []).filter((w) => !/^(piece |panel \d+: piece )/.test(w));
+    el.className = "info " + (over.length || refused.length ? "bad-note" : warnings.length ? "warn-note" : "muted");
     el.textContent = "";
     // A piece that will not fit is not ON a sheet, so it must not be counted
     // onto one: "13 pieces on 2 sheets, 5 too big" reads as a job that is nearly
@@ -826,6 +832,13 @@
       : `${plural(pieces, "piece")} on ${plural(sheets, "sheet")} — every piece fits.`;
     el.appendChild(head);
     for (const item of over) el.appendChild(oversizeLine(item));
+    for (const item of refused) el.appendChild(refusedLine(item));
+    for (const warning of warnings) {
+      const line = document.createElement("div");
+      line.className = "note";
+      line.textContent = warning;
+      el.appendChild(line);
+    }
     // A note under it, so "too big" reads as a thing to do rather than a thing
     // that has happened to you. The seam list is right above this, and removing
     // a seam is as legitimate an answer as adding one.
@@ -836,6 +849,21 @@
         + "Nothing here stops you removing seams first.";
       el.appendChild(what);
     }
+  }
+
+  // One piece the export measured again and refused to write.  It LOOKS placed
+  // on the sheet picture, so the only honest thing to do is name it right under
+  // the fit line: the DXF on disk is short this part on purpose.
+  function refusedLine(item) {
+    const div = document.createElement("div");
+    div.className = "oversize";
+    const where = document.createElement("b");
+    where.textContent = `${item.piece_id} — left out of the sheet files`;
+    const why = document.createElement("div");
+    why.className = "note";
+    why.textContent = item.reason || "the export measured it again and it would not fit";
+    div.append(where, why);
+    return div;
   }
 
   // One piece that will not fit, named, measured, and with what would fix it.
@@ -946,17 +974,21 @@
       // Every path, a failed re-plan included: a Clear button left grey after an
       // error reads as a clear still running, and this is the control that has
       // to work when everything else has gone wrong.
-      clearBusy = false;
-      renderSeamList();
+    clearBusy = false;
+    renderSeamList();
     }
-    renderClearUndo(count);
+    renderClearUndo(count, state.seamsPending !== 0);
   }
 
-  function renderClearUndo(count) {
+  function renderClearUndo(count, unsaved) {
     const el = $("clear-result");
-    el.hidden = false; el.className = "info"; el.innerHTML = "";
+    el.hidden = false; el.className = "info" + (unsaved ? " bad-note" : ""); el.innerHTML = "";
     const line = document.createElement("div");
-    line.textContent = `Removed ${plural(count, "seam")}.`;
+    // "Removed 4 seams." directly under a line saying the change never made it
+    // to the run is two sentences arguing with each other; say which it was.
+    line.textContent = unsaved
+      ? `Removed ${plural(count, "seam")} from this screen — the change did not reach the run yet.`
+      : `Removed ${plural(count, "seam")}.`;
     el.appendChild(line);
     if (!state.seamsCleared || !state.seamsCleared.length) return;
     const undo = document.createElement("button");
@@ -1374,12 +1406,17 @@
   // comes back -- which is what "it was stopping me from deleting bad seams"
   // looks like from the other side of the screen.
   function seamStamp(told) {
-    return { rev: state.seamsRevision, told: !!told, clean: !state.seamsPending };
+    // `run` pins the stamp to ONE run: a reply about the previous boat's seams
+    // may still be on the wire when a new run opens, and without it the stamp
+    // could look current in every other respect while answering for a deck the
+    // page is no longer showing.
+    return { rev: state.seamsRevision, told: !!told, clean: !state.seamsPending, run: state.runId };
   }
 
   // May this reply replace the seam list outright?
   function stampIsCurrent(stamp) {
     if (!stamp) return true;                       // an unstamped caller means "take it"
+    if (stamp.run !== undefined && stamp.run !== state.runId) return false;
     // Something has been edited since it was asked for: the newer list stands,
     // whatever the reply says.
     if (stamp.rev !== state.seamsRevision) return false;
@@ -1451,6 +1488,10 @@
       state.seamsLoaded = true;
       adoptSeams(payload.seams, stampIsCurrent(askedAt));
       renderSeamList();
+      // A seam placed before the run's own seams arrived has been waiting for
+      // exactly this moment; send its re-plan now that the page finally knows
+      // what it is editing.
+      if (state.seamsWait) { state.seamsWait = false; replanSheets(); }
     }
     updateFlatFrame();
     buildSeam3D();
@@ -1503,12 +1544,19 @@
     state.seamsLoaded = true;
     adoptSeams(payload.seams, stampIsCurrent(askedAt));
     renderSeamList();
+    if (state.seamsWait) { state.seamsWait = false; replanSheets(); }
   }
 
   async function refreshSheets(replan) {
     if (!state.runId) { renderSheets(); renderSeamTally(); return; }
     try {
       const own = !sheetSettingsAreDefault();
+      // With the settings changed by hand and the run's seams already loaded,
+      // the GET is skipped outright: it re-plans with the ENGINE's defaults, so
+      // its nesting is one this page would never draw -- a whole second of
+      // nesting per tab switch bought nothing.  The re-plan below, which
+      // carries the settings, is the only thing that paints.
+      if (own && state.seamsLoaded) { await replanSheets(); return; }
       // Stamped `told: false`: this asks the server what is in seams.json, and
       // tells it nothing. Its answer may only replace the seam list when the
       // page had nothing unsaved at the moment it asked -- see seamStamp.
@@ -1548,7 +1596,12 @@
     // is return in silence: the pending mark would stay set for ever, and every
     // later reply would be treated as an answer that had not heard of an edit
     // that no longer exists, so the run's own seams could never load again.
-    if (!state.seamsLoaded && !state.seams.length) {
+    //
+    // A PLACED seam in the same window is not an erase (the list is not empty)
+    // but it is a write about seams the page has not seen, so it waits too:
+    // queue the re-plan and let the reply that loads the run's seams fire it.
+    if (!state.seamsLoaded) {
+      if (state.seams.length) state.seamsWait = true;
       if (state.seamsPending) {
         state.seamsPending = 0;
         seamTrouble("That seam had not been saved to the run yet, so there was nothing to remove. "
@@ -1559,14 +1612,20 @@
     }
     if (replanBusy) { replanAgain = true; return; }
     replanBusy = true; setReplanBusy(true);
+    const run = state.runId;
     try {
       do {
         replanAgain = false;
+        // The run can switch while a re-plan is in flight (another tab, a
+        // quickly clicked run at the bottom of the column). Posting into the
+        // new run whatever this loop still holds would write one boat's seams
+        // over another's, so the loop stops the moment it notices.
+        if (state.runId !== run) break;
         // Stamped `told: true`: this request CARRIES the seam list, so its
         // answer is about exactly these seams whatever is on the disk.
         const askedAt = seamStamp(true);
         applySheets(await api.post("/api/sheets/seams",
-                                   Object.assign({ seams: state.seams }, sheetSettings())), askedAt);
+                                   Object.assign({ seams: state.seams, run_id: run }, sheetSettings())), askedAt);
         // seams.json now holds everything the page had when this went out. An
         // edit made since has a higher revision and is still owed, so the mark
         // only clears for the edits this request actually carried.
@@ -1602,6 +1661,13 @@
     const button = $("btn-replan");
     button.disabled = blocked;
     button.textContent = busy ? "Recalculating…" : "Recalculate";
+    // Nothing may START from the seams while an edit is still unsaved: the
+    // search reads seams.json off the disk and the export cuts from it, so
+    // either one running under a pending save would work from a file the page
+    // has already moved on from -- and the search would then overwrite the
+    // newer edit with an answer to the older question.  Removing seams stays
+    // available throughout; it is the way OUT of a bad state, not a job.
+    const unsaved = state.seamsPending !== 0;
     // The search reads seams.json off the disk and writes it back. A re-plan
     // still on the wire writes the same file, so starting the search under one
     // would let the old seams land on top of the answer with nothing on screen
@@ -1613,16 +1679,16 @@
     // cutting" -- and a button that lays out a whole deck against a direction
     // the engine itself disowns is not a button to offer.
     const noAxis = !!state.boat && !state.boat.axis;
-    $("btn-optimise").disabled = blocked || noAxis;
+    $("btn-optimise").disabled = blocked || unsaved || noAxis;
     $("btn-optimise").title = noAxis
       ? "This run has no boat direction, so there is no along or across the boat to lay seams out on. "
         + "Run the outline again with a pattern, or type a grain angle under Settings."
-      : "";
+      : (unsaved ? "Waiting for your last seam change to be saved to the run." : "");
     // Export writes the sheet DXFs by re-planning from seams.json, and
     // sheet_preview only writes that file once the nest it is doing now
     // finishes. Pressed mid-re-plan it would cut the PREVIOUS seam set, with the
     // new one already on screen.
-    $("btn-sheets").disabled = blocked || !(state.sheets && state.sheets.available);
+    $("btn-sheets").disabled = blocked || unsaved || !(state.sheets && state.sheets.available);
   }
 
   // The same named, measured list of pieces that will not fit as the seam list
@@ -1632,15 +1698,28 @@
   function renderSheetNotes() {
     const el = $("sheets-notes");
     if (!el) return;
-    const over = (state.sheets && state.sheets.available && state.sheets.oversize) || [];
+    const data = state.sheets;
+    const over = (data && data.available && data.oversize) || [];
+    const refused = (data && data.available && data.refused) || [];
+    const warnings = (data && data.available && data.warnings || []).filter(
+      (w) => !/^(piece |panel \d+: piece )/.test(w));
     el.innerHTML = "";
-    el.hidden = !over.length;
-    if (!over.length) return;
+    el.hidden = !(over.length || refused.length || warnings.length);
+    if (el.hidden) return;
     const head = document.createElement("div");
-    head.textContent = `${plural(over.length, "piece")} will not fit a 40×80″ sheet, so `
-      + `${over.length === 1 ? "it is" : "they are"} not on one:`;
+    head.textContent = over.length
+      ? `${plural(over.length, "piece")} will not fit a 40×80″ sheet, so `
+        + `${over.length === 1 ? "it is" : "they are"} not on one:`
+      : "Notes on this layout:";
     el.appendChild(head);
     for (const item of over) el.appendChild(oversizeLine(item));
+    for (const item of refused) el.appendChild(refusedLine(item));
+    for (const warning of warnings) {
+      const line = document.createElement("div");
+      line.className = "note";
+      line.textContent = warning;
+      el.appendChild(line);
+    }
   }
 
   function renderSheets() {
@@ -1992,10 +2071,24 @@
     const el = $("files");
     if (!state.runId) { el.textContent = "Open or make a run first"; el.className = "info muted"; return; }
     el.className = "info files";
-    const order = ["final_auto.dxf", "final.dxf", "outline.3dm", "auto_cam.3dm", "outline.dxf", "autofit_report.md", "outline_report.md", "final_report.md", "calibration_report.md"];
-    const labels = { "final_auto.dxf": "final_auto.dxf (auto-fit, for VCarve)", "final.dxf": "final.dxf (from your drawing)", "outline.3dm": "outline.3dm (draw on this in Rhino)",
-      "auto_cam.3dm": "auto_cam.3dm (auto-fit, review in Rhino)", "outline.dxf": "outline.dxf", "autofit_report.md": "auto-fit report",
-      "outline_report.md": "outline report", "final_report.md": "ingest report", "calibration_report.md": "calibration report" };
+    const labels = {
+      "final_auto.dxf": "final_auto.dxf (auto-fit, for VCarve)",
+      "final.dxf": "final.dxf (from your drawing)",
+      "outline.3dm": "outline.3dm (draw on this in Rhino)",
+      "auto_cam.3dm": "auto_cam.3dm (auto-fit, review in Rhino)",
+      "outline.dxf": "outline.dxf",
+      "autofit_report.md": "auto-fit report",
+      "outline_report.md": "outline report",
+      "final_report.md": "ingest report",
+      "calibration_report.md": "calibration report",
+      "run.json": "run.json (what the run is)",
+      "seams.json": "seams.json (the seams on this run)",
+      "seams_previous.json": "seams_previous.json (undo copy)",
+      "seams_hand.json": "seams_hand.json (your first hand-placed set, kept for good)",
+    };
+    const order = ["final_auto.dxf", "final.dxf", "outline.3dm", "auto_cam.3dm", "outline.dxf",
+                   "autofit_report.md", "outline_report.md", "final_report.md", "calibration_report.md",
+                   "run.json", "seams.json", "seams_previous.json", "seams_hand.json"];
     el.textContent = "";
     const head = document.createElement("div"); head.className = "muted";
     head.textContent = `run ${state.runId}`; el.appendChild(head);
@@ -2003,7 +2096,11 @@
     for (const entry of sheetFiles) {
       const a = document.createElement("a");
       a.href = `/api/file/${encodeURIComponent(state.runId)}/${entry.name}`;
-      a.textContent = `⬇ ${entry.name} — sheet ${entry.sheet} (${entry.pieces.length} piece${entry.pieces.length === 1 ? "" : "s"}, ${(entry.utilisation * 100).toFixed(0)}% used)`;
+      const stale = entry.stale ? " — older export, the seams have changed since" : "";
+      a.textContent = `⬇ ${entry.name} — sheet ${entry.sheet} `
+        + `(${entry.pieces.length} piece${entry.pieces.length === 1 ? "" : "s"}, `
+        + `${(entry.utilisation * 100).toFixed(0)}% used)${stale}`;
+      if (stale) a.title = "This file was written for an earlier seam layout. Export again to bring it up to date.";
       el.appendChild(a);
     }
     if (sheetFiles.length) {
@@ -2012,12 +2109,19 @@
       report.target = "_blank"; report.textContent = "⬇ sheet layout report";
       el.appendChild(report);
     }
-    for (const name of order) {
+    // Everything else from the run's own file list -- including the numbered
+    // seam backups, which the log tells the user to download and which nothing
+    // on this page used to show.
+    const listed = new Set(order.concat(sheetFiles.map((entry) => entry.name)));
+    const extras = Object.keys(files || {}).filter((name) => files[name] && !listed.has(name))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    for (const name of order.concat(extras)) {
       const a = document.createElement("a");
       if (files && files[name]) {
         a.href = `/api/file/${encodeURIComponent(state.runId)}/${name}` + (name.endsWith(".md") ? "?inline=1" : "");
         if (name.endsWith(".md")) a.target = "_blank";
-        a.textContent = "⬇ " + (labels[name] || name);
+        a.textContent = "⬇ " + (labels[name]
+          || (name.startsWith("seams_previous_") ? `${name} (older seam backup)` : name));
       } else { a.className = "missing"; a.textContent = "· " + (labels[name] || name) + " (not yet)"; }
       el.appendChild(a);
     }
@@ -2094,6 +2198,17 @@
   }
 
   // ------------------------------------------------------------ jobs
+  // What the log calls each job kind.  The kind is an internal name
+  // ("optimise_seams") and it used to go straight into "optimise_seams
+  // failed", which is a programmer's word for a thing the fabricator knows as
+  // the best-seam button.
+  const JOB_LABELS = {
+    outline: "outline", autofit: "auto-fit", ingest: "ingest", open: "opening the run",
+    sheets: "sheet export", optimise_seams: "best seam layout", preview: "preview",
+  };
+
+  function jobLabel(kind) { return JOB_LABELS[kind] || kind; }
+
   async function startJob(url, body, label) {
     try {
       setStatus(label + "…", "busy");
@@ -2107,6 +2222,7 @@
     state.job = jobId; state.jobSince = 0;
     setPlacing(false);
     setJobButtons(true, null);
+    let stopped = false;
     const poll = async () => {
       try {
         const j = await api.get(`/api/jobs/${jobId}?since=${state.jobSince}`);
@@ -2114,7 +2230,8 @@
         state.jobSince = j.log_length;
         if (j.status === "done" || j.status === "error") {
           state.job = null;
-          setStatus(j.status === "done" ? `${j.kind} finished in ${j.elapsed_s}s` : `${j.kind} failed`, j.status === "done" ? "" : "error");
+          setStatus(j.status === "done" ? `${jobLabel(j.kind)} finished in ${j.elapsed_s}s`
+                                        : `${jobLabel(j.kind)} failed`, j.status === "done" ? "" : "error");
           // The search's headline must NOT go up before the rest of the page
           // catches up with it. Redrawing the three views takes a few seconds,
           // and announcing "6 seams, 4 sheets, 39% waste" beside a seam list
@@ -2130,25 +2247,42 @@
                                       : (j.error || "The search did not finish, so your seams were left alone.");
             if (!j.result) el.className = "info bad-note";
           }
-          // The seams on the run have just been REPLACED by the search, so the
-          // set the page is about to pull is the machine's and must say so --
-          // in the seam list and on the sheet tab both. When the search did not
-          // improve on what was there it wrote nothing, and the seams are still
-          // whoever's they were, so the line is left alone.
-          if (optimised && j.result && j.result.improved) {
-            state.seamsOrigin = "auto";
-            forgetCleared();
-          }
           await refreshAll();
           // These two change what is on the sheets, so they pull the layout
           // again and re-plan it with the settings the page is showing.
           if (state.runId && (optimised || j.kind === "sheets")) await refreshSheets(true);
+          // The seams on the run have just been REPLACED by the search, so the
+          // set the page pulled is the machine's and must say so -- but only
+          // now, after the refresh, and only when the page actually adopted
+          // them. Setting the origin before the refresh used to stamp "from
+          // the automatic layout" on whatever the page had while a pending
+          // edit was still unsaved; the merge keeps the user's seams in that
+          // case and the label must keep quiet too.
+          if (optimised && j.result && j.result.improved && !state.seamsPending) {
+            state.seamsOrigin = "auto";
+            forgetCleared();
+            renderSeamList();
+          }
           if (optimised && j.result) renderOptimiseResult(j.result);
           return;
         }
-        setStatus(`${j.kind} running (${j.elapsed_s}s)`, "busy");
-      } catch (e) { log(e.message, true); }
-      setTimeout(poll, 700);
+        setStatus(`${jobLabel(j.kind)} running (${j.elapsed_s}s)`, "busy");
+      } catch (e) {
+        // "unknown job" after a server restart is not an error that polling
+        // can outlive: the job is gone with the process, and asking about it
+        // every 700 ms forever just fills the log. Stop, let the buttons go,
+        // and say what happened once.
+        if (/unknown job/i.test(e.message)) {
+          stopped = true;
+          state.job = null;
+          setJobButtons(false, null);
+          log("The program was restarted while a job was running, so that job's progress is gone. "
+              + "Nothing on disk was harmed — press the button again if you still want it.", true);
+          return;
+        }
+        log(e.message, true);
+      }
+      if (!stopped) setTimeout(poll, 700);
     };
     poll();
   }

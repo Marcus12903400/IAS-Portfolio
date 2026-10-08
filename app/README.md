@@ -1,4 +1,4 @@
-# AutoDeck 5.3 — the review app
+# AutoDeck 5.4 — the review app
 
 Double-click to open. Drop in a 3D scan, see it in 3D, run the outline /
 pattern / auto-fit stages and see every result drawn **over the mesh** and in

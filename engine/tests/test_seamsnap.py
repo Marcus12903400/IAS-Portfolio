@@ -953,16 +953,17 @@ def test_references_from_a_real_fitted_dxf_look_sane():
             assert cutouts == []
 
 
-def test_a_seam_drawn_along_a_real_fitted_edge_is_squared_and_lands_on_it():
+def test_a_seam_drawn_along_a_real_fitted_edge_is_squared_and_lands_beside_it():
     """End to end on real scanned geometry: take the longest fitted edge as the
     boat direction -- which is roughly what it is on a deck panel -- draw a seam
     three degrees off it and 8 mm to one side, and it comes back exactly along
-    the boat AND exactly on a real fitted edge."""
+    the boat AND running with a real fitted edge, half a seam gap off it on the
+    far side of the material so the kerf shaves nothing off the part."""
 
     loops = _cached_fitted_loops()
     if loops is None:
         pytest.skip("no cached run with a final_auto.dxf containing cut-outs")
-    opts = options()
+    opts = options(seam_gap_mm=6.0)
     references = seamsnap.references_from_loops(loops, opts)
     edge = max((r for r in references if r.kind == "line"), key=lambda r: r.length_mm)
 
@@ -971,9 +972,20 @@ def test_a_seam_drawn_along_a_real_fitted_edge_is_squared_and_lands_on_it():
 
     assert result.applied and result.kind == "along-boat"
     assert parallelism(direction(result), edge.unit) == pytest.approx(1.0, abs=1e-12)
+    half_gap = float(opts["seam_gap_mm"]) / 2.0
     landed = min(r.offset_of(endpoints(result)[0]) for r in references
                  if r.kind == "line" and seamsnap._direction_angle_deg(r.unit, edge.unit) < 0.5)
-    assert landed < 1e-9
+    # Exactly half a gap off the edge: close enough that the join reads as
+    # running on it, far enough that the kerf (half a gap either side of the
+    # seam) never crosses into the material.
+    assert landed == pytest.approx(half_gap, abs=1e-6)
+    # ...and on the side AWAY from the material, which is the whole point: the
+    # piece keeps the fitted outline and the hatch stays its fitted size.
+    assert any(r.material_normal is not None
+               and float(np.dot(np.array(endpoints(result)[0]) - r.p0, r.material_normal)) < 0.0
+               for r in references
+               if r.kind == "line" and seamsnap._direction_angle_deg(r.unit, edge.unit) < 0.5
+               and r.offset_of(endpoints(result)[0]) < half_gap + 1e-6)
 
     again = seamsnap.snap_seam(result.x1, result.y1, result.x2, result.y2, references, opts,
                                axis=edge.unit)
@@ -1070,19 +1082,31 @@ def _unit_of(segment):
     return span / float(np.hypot(*span))
 
 
-def test_this_runs_own_saved_seams_come_back_square_and_stay_there():
+def test_this_runs_own_saved_seams_come_back_square_and_stay_there(tmp_path):
     """The four seams the user actually drew on this deck, straightened against
     this deck's own axis and its own fitted edges: every one ends up on a master
-    direction, and straightening the result again moves nothing."""
+    direction, and straightening the result again moves nothing.
+
+    The seams are PINNED as data (shared with test_nesting_speed) rather than
+    read from the run's live seams.json -- that file belongs to the app, and
+    placing one seam in the product used to point this test at data created
+    minutes earlier.
+    """
+
+    from test_nesting_speed import PINNED_SEAMS
 
     frame = _stored_frame(AXIS_RUN)
     loops = _cached_fitted_loops(AXIS_RUN)
-    saved = sheets.read_seams(AXIS_RUN)
-    if frame is None or loops is None or not saved:
+    if frame is None or loops is None:
         pytest.skip(f"cached run {AXIS_RUN.name} is not present, or has no seams")
+    (tmp_path / "seams.json").write_text(
+        json.dumps({"seams": PINNED_SEAMS[AXIS_RUN.name]}, indent=2), encoding="utf-8")
+    saved = sheets.read_seams(tmp_path)
+    if not saved:
+        pytest.skip("no pinned seams for this run")
     axis = np.asarray(frame["longitudinal_axis"], dtype=float)
     along, across = seamsnap.master_directions(axis)
-    opts = options()
+    opts = options(seam_gap_mm=6.0)
     references = seamsnap.references_from_loops(loops, opts)
 
     results = seamsnap.snap_seams(saved, references, opts, axis=axis)
@@ -1105,17 +1129,26 @@ def test_this_runs_own_saved_seams_come_back_square_and_stay_there():
         assert parallelism(long_seams[0], other) == pytest.approx(1.0, abs=1e-12)
 
 
-def test_the_run_with_no_pattern_frame_is_the_one_that_warns():
+def test_the_run_with_no_pattern_frame_is_the_one_that_warns(tmp_path):
     """The fallback fixture, doing the only job it can do: with `teak.frame`
     null there is no direction to square to, so the seams are lined up with
-    fitted edges only and every result says so."""
+    fitted edges only and every result says so.
+
+    Pinned like the test above: the live seams.json is the app's to rewrite.
+    """
+
+    from test_nesting_speed import PINNED_SEAMS
 
     loops = _cached_fitted_loops(NO_AXIS_RUN)
-    saved = sheets.read_seams(NO_AXIS_RUN)
-    if loops is None or not saved:
-        pytest.skip(f"cached run {NO_AXIS_RUN.name} is not present, or has no seams")
+    if loops is None:
+        pytest.skip(f"cached run {NO_AXIS_RUN.name} is not present")
+    (tmp_path / "seams.json").write_text(
+        json.dumps({"seams": PINNED_SEAMS[NO_AXIS_RUN.name]}, indent=2), encoding="utf-8")
+    saved = sheets.read_seams(tmp_path)
+    if not saved:
+        pytest.skip("no pinned seams for this run")
     assert _stored_frame(NO_AXIS_RUN) is None
-    opts = options()
+    opts = options(seam_gap_mm=6.0)
     references = seamsnap.references_from_loops(loops, opts)
 
     results = seamsnap.snap_seams(saved, references, opts, axis=None)

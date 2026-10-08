@@ -1,4 +1,4 @@
-# AutoDeck2 — the engine behind AutoDeck 5.3
+# AutoDeck2 — the engine behind AutoDeck 5.4
 
 Scan in → a Rhino file with the **raw** detected deck outline to draw on →
 your hand-drawn lines/arcs back in → validated `final.dxf` for VCarve plus

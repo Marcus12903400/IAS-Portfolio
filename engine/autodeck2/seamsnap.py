@@ -423,6 +423,15 @@ class Reference:
     direction).  `angles` is (start, start + sweep) in radians, signed the way
     `sheets.bulge_to_arc` reports it, so a clockwise arc keeps its direction.
 
+    `role` says where a fitted "line" came from: "" for axis and seam
+    references, "outer" for the panel's own boundary, "hole" for the edge of a
+    cut-out (the console wall, a hatch).  A boundary edge may still be slid
+    onto, but never with the kerf centred on it -- see `material_normal`.
+
+    `material_normal` is the unit vector pointing INTO the deck material from
+    that edge (so the kerf can be kept out of it), or None when the reference
+    has no material side.
+
     eq is off because numpy arrays do not compare to a single truth value and a
     generated __eq__ would raise the moment anything put a Reference in a set.
     """
@@ -435,6 +444,8 @@ class Reference:
     centre: np.ndarray | None = None
     radius: float | None = None
     angles: tuple[float, float] | None = None
+    role: str = ""
+    material_normal: np.ndarray | None = None
 
     # ---- straight geometry (line, seam, axis)
 
@@ -512,8 +523,17 @@ class Reference:
 
 
 def _loop_references(loop: Loop, panel_id: int, label: str,
-                     min_length_mm: float, min_radius_mm: float) -> list[Reference]:
-    """Every segment of one fitted loop that is worth lining a seam up with."""
+                     min_length_mm: float, min_radius_mm: float,
+                     role: str = "", material_left: bool = True) -> list[Reference]:
+    """Every segment of one fitted loop that is worth lining a seam up with.
+
+    `role` ("outer"/"hole") and `material_left` say where the deck material
+    lies for this loop -- left of the travel when the loop's winding matches
+    its role (outer CCW, hole CW), right when it does not.  The per-segment
+    normal built from them is what lets the slide keep a kerf off the material
+    side of a boundary edge, instead of shaving half a gap off the part or
+    widening a hatch by one.
+    """
 
     from .sheets import bulge_to_arc
 
@@ -528,7 +548,11 @@ def _loop_references(loop: Loop, panel_id: int, label: str,
         chord = float(math.hypot(*(p1 - p0)))
         if abs(bulge) < 1e-12:
             if chord >= min_length_mm:
-                references.append(Reference("line", label, panel_id, p0, p1))
+                span = p1 - p0
+                left = np.array([-span[1], span[0]]) / chord
+                references.append(Reference("line", label, panel_id, p0, p1,
+                                            role=role,
+                                            material_normal=left if material_left else -left))
             continue
         if chord < _EPS:
             continue
@@ -536,8 +560,16 @@ def _loop_references(loop: Loop, panel_id: int, label: str,
         if radius >= min_radius_mm:
             references.append(Reference("arc", label, panel_id, p0, p1,
                                         centre=centre, radius=float(radius),
-                                        angles=(float(start), float(start + sweep))))
+                                        angles=(float(start), float(start + sweep)), role=role))
     return references
+
+
+def _signed_area(loop: Loop) -> float:
+    """The shoelace area of a loop, positive when it is walked CCW."""
+
+    xy = np.asarray(loop.xy, dtype=float)
+    x, y = xy[:, 0], xy[:, 1]
+    return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
 
 
 def references_from_loops(loops_by_panel: Mapping[int, Sequence[Loop]], options: dict[str, Any],
@@ -552,6 +584,11 @@ def references_from_loops(loops_by_panel: Mapping[int, Sequence[Loop]], options:
     The labels matter more than they look: the console the user talks about IS
     a hole loop, so "panel 1 cut-out edge" is the phrase that will tell them
     what their seam locked onto.
+
+    Each loop also says which side of itself the material is on -- left of the
+    travel when the loop's winding matches its role (outer CCW, hole CW), right
+    when it does not -- so a seam slid onto a boundary edge can keep its kerf
+    clear of the material instead of shaving half a gap off the part.
     """
 
     from .sheets import classify_loops
@@ -571,9 +608,16 @@ def references_from_loops(loops_by_panel: Mapping[int, Sequence[Loop]], options:
             _outer, hole_loops = classify_loops(loops, step)
             holes = {i for i, loop in enumerate(loops) if any(loop is hole for hole in hole_loops)}
         for index, loop in enumerate(loops):
-            kind = "cut-out edge" if index in holes else "outer edge"
+            is_hole = index in holes
+            kind = "cut-out edge" if is_hole else "outer edge"
+            # Which way the deck material lies for THIS loop: a boundary walked
+            # with the grain of its role (outer CCW, hole CW) has it on the
+            # left; a loop wound the other way has it on the right.  Either
+            # way the side is a fact about the loop, read off it once here.
+            material_left = (_signed_area(loop) > 0.0) != is_hole
             references.extend(_loop_references(
-                loop, panel_id, f"panel {panel_id} {kind}", min_length, min_radius))
+                loop, panel_id, f"panel {panel_id} {kind}", min_length, min_radius,
+                role="hole" if is_hole else "outer", material_left=material_left))
     return references
 
 
@@ -727,13 +771,15 @@ class _Candidate:
 
 
 def _candidates(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
-                references: Sequence[Reference], options: dict[str, Any]) -> Iterator[_Candidate]:
+                references: Sequence[Reference], options: dict[str, Any],
+                panel_ids: frozenset[int] | None = None) -> Iterator[_Candidate]:
     """Every correction a FITTED reference could justify, acceptance tests
     applied but scoring and the move guard still to come.
 
     Axis references are skipped here: the boat direction is decided before any
     of this runs (or, with `seam_axis_priority` off, after it), never as one
-    more candidate competing on cost.
+    more candidate competing on cost.  References from other panels are skipped
+    too -- see `_same_panel`.
     """
 
     angle_limit = float(options["seam_snap_angle_deg"])
@@ -743,6 +789,8 @@ def _candidates(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
 
     for reference in references:
         if reference.kind == "axis":
+            continue
+        if not _same_panel(reference, panel_ids):
             continue
 
         if reference.kind in ("line", "seam"):
@@ -859,6 +907,9 @@ def _note(kind: str, reference: Reference, angle_deg: float, moved_mm: float,
         # "lined up with the boat and the teak lines", "squared across the boat".
         verb = "lined up with" if kind == "along-boat" else "squared"
         if refined is not None:
+            if refined.role in ("outer", "hole"):
+                return (f"{verb} {label}, then slid alongside {refined.label} "
+                        "(kerf kept clear of the material)")
             return f"{verb} {label}, then moved {_mm(shift_mm)} mm onto {refined.label}"
         if angle_deg < 0.05:
             return f"{verb} {label}"
@@ -889,9 +940,28 @@ def _unchanged(p: np.ndarray, q: np.ndarray) -> SnapResult:
                       angle_change_deg=0.0, moved_mm=0.0, note="")
 
 
+def _same_panel(reference: Reference, panel_ids: frozenset[int] | None) -> bool:
+    """May this reference be offered to a seam on these panels?
+
+    The reference pool is one list for the whole nested layout, and the nest
+    puts panels that are metres apart on the boat side by side on the flat
+    view.  Without this test an across-boat join on panel 1 was measured
+    sliding 24 mm sideways onto a 40 mm stub of seam on panel 4, which had
+    only ever been near it because the nest moved panel 4 next door.  Axis
+    references carry no panel (a direction is nowhere in particular) and a
+    seam stored without one cannot be attributed, so both stay eligible.
+    """
+
+    if panel_ids is None or reference.panel_id is None:
+        return True
+    return reference.panel_id in panel_ids
+
+
 def _refine_position(a: np.ndarray, b: np.ndarray, unit: np.ndarray,
                      references: Sequence[Reference],
-                     options: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, Reference, float] | None:
+                     options: dict[str, Any],
+                     panel_ids: frozenset[int] | None = None
+                     ) -> tuple[np.ndarray, np.ndarray, Reference, float] | None:
     """Slide an already-squared seam sideways onto a fitted edge that is square
     too, without touching its angle.
 
@@ -901,6 +971,22 @@ def _refine_position(a: np.ndarray, b: np.ndarray, unit: np.ndarray,
     but only because the edge itself turned out to be square within half a
     degree.  If it is not square, the seam stays where the boat put it and the
     edge is ignored: that mismatch is the boat's, not the seam's.
+
+    Three restrictions, each bought from a measured defect:
+
+      * only references on the SEAM'S OWN PANEL are offered -- the pool is one
+        list for the whole nest, and panels metres apart on the boat sit side
+        by side in it (see `_same_panel`);
+      * a BOUNDARY edge (the panel's own outline, a cut-out) is landed on with
+        the kerf kept OUT of the material: the seam stops half a seam gap
+        short of the edge line, on the far side of it, so the join runs on the
+        edge without shaving a strip off the part or widening a hatch.  A kerf
+        centred on the edge used to eat 3 mm of deck either way;
+      * a SEAM reference is exempt from the reach test when it does not run
+        alongside: two collinear joins end to end are one join continuing
+        across a cut-out, and the 1125 mm console was further than the reach
+        limit, so the starboard half of such a join used to land 11 mm off the
+        port half and leave a 5.6 mm strip between them.
 
     The move is a translation along the seam's own normal, so the direction
     survives untouched, and the seam's MIDDLE is what lands on the reference
@@ -919,6 +1005,7 @@ def _refine_position(a: np.ndarray, b: np.ndarray, unit: np.ndarray,
     offset_limit = float(options["seam_snap_offset_mm"])
     reach_limit = float(options["seam_snap_reach_mm"])
     max_move = float(options["seam_snap_max_move_mm"])
+    half_gap = float(options.get("seam_gap_mm", 6.0)) / 2.0
 
     normal = np.array([-unit[1], unit[0]])
     middle = (a + b) / 2.0
@@ -935,6 +1022,8 @@ def _refine_position(a: np.ndarray, b: np.ndarray, unit: np.ndarray,
     for reference in references:
         if reference.kind not in ("line", "seam"):
             continue
+        if not _same_panel(reference, panel_ids):
+            continue
         ref_unit = reference.unit
         if float(math.hypot(*ref_unit)) < 0.5:
             continue
@@ -944,7 +1033,9 @@ def _refine_position(a: np.ndarray, b: np.ndarray, unit: np.ndarray,
             # Two joins across the same stretch of deck. Merging them would
             # delete the strip between -- see `_runs_alongside`.
             continue
-        if reference.distance_to(a, b) > reach_limit:
+        if reference.kind == "line" and reference.distance_to(a, b) > reach_limit:
+            # A fitted edge genuinely has to be nearby to mean anything.  A
+            # seam does not: see the docstring for the cut-out continuation.
             continue
         denom = _cross(ref_unit, normal)
         if abs(denom) < 0.5:
@@ -962,7 +1053,14 @@ def _refine_position(a: np.ndarray, b: np.ndarray, unit: np.ndarray,
         return None
     distance, shift, reference = best
     move = normal * shift
-    return a + move, b + move, reference, distance
+    final_a, final_b = a + move, b + move
+    if reference.role in ("outer", "hole") and reference.material_normal is not None:
+        # Keep the kerf out of the material: the seam sits half a gap off the
+        # edge on its far side, so the join reads as running on the edge while
+        # the piece keeps the fitted outline the fitter worked out.
+        away = reference.material_normal * -half_gap
+        final_a, final_b = final_a + away, final_b + away
+    return final_a, final_b, reference, float(max(np.hypot(*(final_a - a)), np.hypot(*(final_b - b))))
 
 
 @dataclass
@@ -983,7 +1081,8 @@ class _Step:
 
 def _axis_step(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
                masters: tuple[np.ndarray, np.ndarray], references: Sequence[Reference],
-               options: dict[str, Any]) -> _Step | None:
+               options: dict[str, Any],
+               panel_ids: frozenset[int] | None = None) -> _Step | None:
     """Rules 1 and 2: square the seam to the boat, then let it settle onto a
     square edge if there is one.
 
@@ -1019,7 +1118,7 @@ def _axis_step(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
 
     landed: Reference | None = None
     shift = 0.0
-    refined = _refine_position(a, b, unit, references, options)
+    refined = _refine_position(a, b, unit, references, options, panel_ids)
     if refined is not None:
         a, b, landed, shift = refined
     return _Step(kind, Reference("axis", label, None, middle, middle + master),
@@ -1027,7 +1126,8 @@ def _axis_step(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
 
 
 def _feature_step(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
-                  references: Sequence[Reference], options: dict[str, Any]) -> _Step | None:
+                  references: Sequence[Reference], options: dict[str, Any],
+                  panel_ids: frozenset[int] | None = None) -> _Step | None:
     """Rule 3: the old corrector, for seams the boat axis did not claim.
 
     Returns None when nothing came close enough.  A seam already sitting on the
@@ -1048,7 +1148,7 @@ def _feature_step(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
 
     best: _Candidate | None = None
     best_cost = math.inf
-    for candidate in _candidates(p, q, drawn, references, options):
+    for candidate in _candidates(p, q, drawn, references, options, panel_ids):
         moved = max(float(math.hypot(*(candidate.q0 - p))), float(math.hypot(*(candidate.q1 - q))))
         if moved > max_move:
             continue
@@ -1067,7 +1167,8 @@ def _feature_step(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
 def snap_seam(x1: float, y1: float, x2: float, y2: float,
               references: Sequence[Reference], options: dict[str, Any],
               axis: Sequence[float] | None = None,
-              direction_locked: bool = False) -> SnapResult:
+              direction_locked: bool = False,
+              panel_ids: Sequence[int] | None = None) -> SnapResult:
     """Correct one roughly drawn seam: square it to the boat, or failing that
     line it up with the geometry it was aiming at.
 
@@ -1087,6 +1188,12 @@ def snap_seam(x1: float, y1: float, x2: float, y2: float,
     the centreline while the seam list went on calling it ten degrees.  The
     seam may still be SLID sideways onto a fitted edge that shares its
     direction, which is a position change and not a direction change.
+
+    `panel_ids` names the panels this seam actually cuts, and only references
+    from those panels are offered to it -- the reference pool spans the whole
+    nested layout, where panels metres apart on the boat sit side by side.
+    None means no restriction, which is the honest answer for a free seam that
+    applies wherever it crosses.
 
     Returns the seam unchanged -- `applied` False, empty note -- if nothing
     came close enough, if the correction would have moved an endpoint further
@@ -1112,6 +1219,7 @@ def snap_seam(x1: float, y1: float, x2: float, y2: float,
         return _unchanged(p, q)
 
     references = list(references)
+    allowed = frozenset(int(pid) for pid in panel_ids) if panel_ids is not None else None
     warnings: list[str] = []
     masters: tuple[np.ndarray, np.ndarray] | None = None
     if bool(options.get("seam_snap_use_axis", True)):
@@ -1122,7 +1230,7 @@ def snap_seam(x1: float, y1: float, x2: float, y2: float,
 
     drawn = _unit(q - p)
     if direction_locked:
-        return _locked(p, q, drawn, references, options, warnings)
+        return _locked(p, q, drawn, references, options, warnings, allowed)
 
     axis_first = bool(options.get("seam_axis_priority", SNAP_DEFAULTS["seam_axis_priority"]))
     max_move = float(options["seam_snap_max_move_mm"])
@@ -1142,12 +1250,12 @@ def snap_seam(x1: float, y1: float, x2: float, y2: float,
         here = _unit(current_q - current_p)
         step: _Step | None = None
         if masters is not None and axis_first:
-            step = _axis_step(current_p, current_q, here, masters, references, options)
+            step = _axis_step(current_p, current_q, here, masters, references, options, allowed)
         if step is None:
-            step = _feature_step(current_p, current_q, here, references, options)
+            step = _feature_step(current_p, current_q, here, references, options, allowed)
         if step is None and masters is not None and not axis_first:
             # Feature-first mode: the boat still squares up whatever no edge wanted.
-            step = _axis_step(current_p, current_q, here, masters, references, options)
+            step = _axis_step(current_p, current_q, here, masters, references, options, allowed)
         if step is None:
             break
         if max(float(math.hypot(*(step.a - current_p))),
@@ -1186,7 +1294,8 @@ def snap_seam(x1: float, y1: float, x2: float, y2: float,
 
 def _locked(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
             references: Sequence[Reference], options: dict[str, Any],
-            warnings: list[str]) -> SnapResult:
+            warnings: list[str],
+            panel_ids: frozenset[int] | None = None) -> SnapResult:
     """The whole correction for a seam whose direction may not be touched.
 
     Rule 2 and nothing else: if a straight fitted edge shares this seam's
@@ -1197,10 +1306,12 @@ def _locked(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
     One shift settles it -- the seam does not rotate, so no second round can
     bring a reference into range that the first did not have -- and sliding it
     onto an edge it is already on moves it nowhere, which is idempotence for
-    free.
+    free.  A boundary edge is landed on with the kerf kept out of the material
+    (see `_refine_position`), and the note says the join RUNS WITH that edge
+    rather than claiming to sit on its line.
     """
 
-    refined = _refine_position(p, q, drawn, references, options)
+    refined = _refine_position(p, q, drawn, references, options, panel_ids)
     if refined is None:
         result = _unchanged(p, q)
         result.warnings = warnings
@@ -1211,11 +1322,15 @@ def _locked(p: np.ndarray, q: np.ndarray, drawn: np.ndarray,
         result = _unchanged(p, q)
         result.warnings = warnings
         return result
+    if reference.role in ("outer", "hole"):
+        note = f"runs with {reference.label}, kerf kept clear of the material"
+    else:
+        note = f"moved {_mm(shift)} mm onto {reference.label}"
     result = SnapResult(
         x1=float(a[0]), y1=float(a[1]), x2=float(b[0]), y2=float(b[1]),
         applied=True, kind="collinear", reference_label=reference.label,
         angle_change_deg=0.0, moved_mm=moved,
-        note=f"moved {_mm(shift)} mm onto {reference.label}",
+        note=note,
     )
     result.warnings = warnings
     return result
@@ -1248,7 +1363,9 @@ def snap_seams(seams: Sequence[Any], references: Sequence[Reference], options: d
     results: list[SnapResult] = []
     for index, seam in enumerate(seams):
         x1, y1, x2, y2 = _endpoints(seam)
-        result = snap_seam(x1, y1, x2, y2, pool, options, axis=axis)
+        panel_id = getattr(seam, "panel_id", None)
+        result = snap_seam(x1, y1, x2, y2, pool, options, axis=axis,
+                           panel_ids=None if panel_id is None else [int(panel_id)])
         results.append(result)
         p0 = np.array([result.x1, result.y1], dtype=float)
         p1 = np.array([result.x2, result.y2], dtype=float)

@@ -1,4 +1,4 @@
-# AutoDeck 5.3
+# AutoDeck 5.4
 
 > Working on this with an AI assistant? Start with **`HANDOFF_FOR_NEXT_AI.md`** (full
 > project handoff, 2026-10-07) and `docs/seam-audit-2026-10-07.md` (the open defects).
@@ -6,7 +6,18 @@
 Scan in → deck outline, pattern and auto-fit CAM geometry out, reviewed in a
 browser and downloaded as DXF for VCarve.
 
-The page you open says **AutoDeck 5.3** in the tab and in the top-left corner.
+The page you open says **AutoDeck 5.4** in the tab and in the top-left corner.
+
+
+**New in 5.4** — the 2026-10-07 audit fixes: cut-outs and arcs survive every
+seam cut (the round cut-out used to vanish from cut pieces); a seam placed
+with the direction tool cuts exactly the chord you clicked instead of the
+whole line across the boat; the hover preview is now the cut, to the last
+fraction of a millimetre; slivers a seam shaves off are dropped with a warning
+instead of nested; the optimiser no longer calls a seam "on fitted edges" when
+it is not, keeps its cuts off the small cut-outs, waits for unsaved edits, and
+keeps your first hand-placed set forever as seams_hand.json. The full list,
+with the reasoning and the measurements, is in `docs/changes-2026-10-07.md`.
 If it says anything else, an older copy is still running on that port.
 
 ## Open it
@@ -40,7 +51,7 @@ AutoDeck.bat        Windows: double-click this            <- the button
 AutoDeck.command    macOS: double-click this
 AutoDeck.app        macOS: same thing, as an app icon
 
-app/                AutoDeck 5.3 review UI - the browser app you see
+app/                AutoDeck 5.4 review UI - the browser app you see
 engine/             AutoDeck2: outline, patterns, auto-fit, ingest
 engine-v1/          AutoDeck v1: the analysis engine engine/ runs on
 

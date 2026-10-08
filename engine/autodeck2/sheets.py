@@ -35,6 +35,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -63,6 +66,14 @@ DEFAULTS: dict[str, Any] = {
     "sample_step_mm": 1.0,
     "arc_rebuild_tolerance_mm": 0.05,
     "min_piece_area_mm2": 400.0,                   # discard slivers a seam shaves off
+    # ...and how NARROW a cut piece may be and still be worth handling.  Area
+    # alone let a 1156 x 5.6 mm toothpick through (6473 mm2) and it went on to
+    # the sheet as a part nobody can route.  The floor has to stay under the
+    # 25-40 mm width of the reference boat's gunwale-strip panels, which the
+    # optimiser legitimately cuts into pieces of that same width, so 15 mm:
+    # it removes every sliver the audit measured (5-10 mm wide) and keeps every
+    # real part.  Settable in config["sheets"] for a shop that wants it wider.
+    "min_piece_width_mm": 15.0,
     # Nesting search granularity.
     "nest_step_mm": 5.0,
     "allow_180_rotation": True,
@@ -123,6 +134,23 @@ def settings(config: dict[str, Any] | None = None) -> dict[str, Any]:
             f"sheets.seam_tidiness_weight must be between 0.0 and 1.0 (got {weight})"
         )
     merged["seam_tidiness_weight"] = weight
+    # A step of zero is not "as fine as possible", it is a hang or a division
+    # by zero: `sample_loop` divides by it and the nester's position grid is
+    # built by repeated addition of `nest_step_mm`, which never terminates at
+    # zero.  Both were reachable from a config file with a 0 in it, and both
+    # took every /api/sheets call down with them, so both are refused here --
+    # the one place every caller already goes through.
+    for key in ("sample_step_mm", "nest_step_mm"):
+        if float(merged[key]) <= 0.0:
+            raise ValueError(f"sheets.{key} must be greater than zero (got {merged[key]})")
+    # Everything else numeric must at least be a real, finite number: a NaN or
+    # an infinity in the config reaches the geometry as a number no later rule
+    # can reject and comes back out as the bare token NaN in the result JSON.
+    for key, value in merged.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if not math.isfinite(float(value)):
+            raise ValueError(f"sheets.{key} must be a finite number (got {value})")
     return merged
 
 
@@ -222,12 +250,16 @@ def _bulge_through(p0: np.ndarray, mid: np.ndarray, p1: np.ndarray) -> float:
 
 
 def rebuild_loop(points: np.ndarray, segment_source: np.ndarray, original: Loop,
-                 tolerance_mm: float) -> tuple[Loop, float]:
+                 tolerance_mm: float,
+                 fallbacks: list[int] | None = None) -> tuple[Loop, float]:
     """Turn a ring of points back into (x, y, bulge) vertices.
 
     Provenance is per SEGMENT, not per vertex: `segment_source[i]` is the
     original loop segment that produced the edge from `points[i]` to
-    `points[i+1]`, or -1 for an edge the seam kerf introduced.
+    `points[i+1]`, or -1 for an edge the seam kerf introduced.  The ids are
+    interpreted against `original.bulges`, so a caller handing in several
+    source loops must offset their segment ids into one combined table -- see
+    `_rebuild_ring`, which is every in-tree caller.
 
     Per-vertex provenance does not work here.  A straight kerf cut arrives from
     shapely as a single edge with only two vertices, and both of them sit ON
@@ -238,7 +270,9 @@ def rebuild_loop(points: np.ndarray, segment_source: np.ndarray, original: Loop,
 
     Runs of segments sharing an arc provenance collapse into one bulge;
     everything else becomes a line.  Returns the loop and the worst deviation
-    between a rebuilt arc and the points it replaced.
+    between a rebuilt arc and the points it replaced.  When `fallbacks` is
+    given, one entry per arc run that FAILED its tolerance is appended, so the
+    caller can report flattening the rebuilt arc count alone cannot see.
     """
 
     n = len(points)
@@ -282,6 +316,8 @@ def rebuild_loop(points: np.ndarray, segment_source: np.ndarray, original: Loop,
         if deviation > tolerance_mm:
             # Do not fake an arc through points that are not on one; keep the
             # sampled polyline rather than cut the wrong shape.
+            if fallbacks is not None:
+                fallbacks.append(len(segments))
             for index in segments:
                 vertices.append([points[index][0], points[index][1], 0.0])
             continue
@@ -454,26 +490,75 @@ class Seam:
         unit = direction / length
         return LineString([p0 - unit * distance_mm, p1 + unit * distance_mm])
 
+    @property
+    def chord_bound(self) -> bool:
+        """Does this seam cut ONLY the chord that was clicked?
+
+        A seam placed with the direction-first tool (any `mode`) is a chord of
+        the panel: the hover showed one specific stretch of the line, broken
+        around the console, and the click said "join THERE".  Extending such a
+        seam across the whole panel -- the legacy behaviour, still right for a
+        free two-point drag on an old run -- split decks in half when the user
+        had asked for one 450 mm join beside the console.  So a moded seam cuts
+        its stored chord plus a little reach past the outline, and only a mode-
+        less legacy seam keeps the whole-line extension.
+        """
+
+        return bool(self.mode)
+
 
 def read_seams(run_dir: Path) -> list[Seam]:
+    """The run's seam list, or [] when the file is missing or unreadable.
+
+    A crash mid-write used to leave a 0-byte seams.json, and then EVERY reader
+    failed on the JSONDecodeError -- the Sheets tab on open, the optimiser
+    before it could take its backup.  Now the broken file is kept as a .bak
+    (only when one is not already there, so repeated failures do not eat the
+    best copy), the run reads as "no seams", and the user can still work.
+
+    utf-8-sig because a file edited by hand in Windows Notepad can carry a BOM,
+    and `json.loads` refuses one.
+    """
+
     path = Path(run_dir) / "seams.json"
     if not path.is_file():
         return []
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return [Seam.from_dict(item) for item in payload.get("seams", [])]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (ValueError, OSError):
+        backup = path.with_name("seams.json.bak")
+        try:
+            if not backup.is_file() and path.stat().st_size > 0:
+                backup.write_bytes(path.read_bytes())
+        except OSError:
+            pass
+        return []
+    if not isinstance(payload, dict):
+        return []
+    seams = []
+    for item in payload.get("seams") or []:
+        try:
+            seams.append(Seam.from_dict(item))
+        except (ValueError, TypeError, KeyError):
+            continue
+    return seams
 
 
 def write_seams(run_dir: Path, seams: Sequence[Seam]) -> Path:
     """Replace the run's seam list.
 
-    Written IN PLACE, deliberately, and not through the write-a-temp-file-then-
-    rename dance that would make it atomic.  Measured on this platform: with
+    Written through a temp file and `os.replace` when Windows allows it, and
+    IN PLACE when it does not.  The trade was measured on this platform: with
     three threads reading the file while it is rewritten four thousand times,
     `Path.replace` onto the live name fails 3921 times out of 4000, because
-    Windows will not rename over a file another handle has open and Python does
-    not open for reading with delete sharing.  Trading a reader that sometimes
-    sees half a file for a WRITER that almost always fails is much the worse
-    bargain: the write is the user's seam edit, and losing it loses their work.
+    Windows will not rename over a file another handle has open and the seam
+    hover opens the file on every pointer move.  A writer that almost always
+    fails loses the user's edit, which is the one thing this file holds.
+
+    So the temp file is tried FIRST -- a crash between creating it and
+    replacing leaves the old file intact, which fixes the truncate-then-write
+    window that used to leave a 0-byte seams.json -- and the in-place write is
+    the fallback that keeps the save itself reliable.
 
     The one reader that really can arrive mid-write is the seam hover, which
     runs on every pointer move; `bridge.seam_references` catches the parse error
@@ -484,12 +569,33 @@ def write_seams(run_dir: Path, seams: Sequence[Seam]) -> Path:
     """
 
     path = Path(run_dir) / "seams.json"
-    path.write_text(json.dumps({"seams": [s.to_dict() for s in seams]}, indent=2), encoding="utf-8")
+    text = json.dumps({"seams": [s.to_dict() for s in seams]}, indent=2)
+    handle, temp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".seams-", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as temp:
+            temp.write(text)
+        os.replace(temp_name, str(path))
+    except OSError:
+        # Windows refused the rename because a reader held the file open.  The
+        # save must not fail: write in place, exactly as this function always
+        # did, and accept the torn-read window the hover already tolerates.
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        path.write_text(text, encoding="utf-8", newline="\n")
     return path
 
 
 # --------------------------------------------------------------------------
 # splitting
+
+# The shortest run of seam inside a panel that counts as a join rather than a
+# nick in the edge of the part.  The same number `seamplace` puts under every
+# chord it offers, stated here through `seamsnap` (which `sheets` already
+# imports for its defaults) so the hover, the click and the cut cannot disagree
+# about what a seam is.
+MIN_CHORD_MM = _seamsnap.MIN_SEAM_LENGTH_MM
 
 
 @dataclass
@@ -503,6 +609,11 @@ class Piece:
     area_mm2: float = 0.0
     from_seam: bool = False
     max_arc_error_mm: float = 0.0
+    # How many arc runs the ring rebuild refitted as polylines because the
+    # three-point fit failed its tolerance.  Zero on a healthy split; a number
+    # that climbs means arcs are quietly being flattened, which is exactly the
+    # regression `max_arc_error_mm` cannot see (it only counts arcs that PASSED).
+    arc_fallbacks: int = 0
 
     def polygon(self, step_mm: float) -> Polygon:
         return loop_polygon(self.outer, self.holes, step_mm)
@@ -517,6 +628,15 @@ def split_panel(panel_id: int, outer: Loop, holes: Sequence[Loop], seams: Sequen
     half the gap with flat ends -- from the panel polygon.  That gives the
     asymmetry the job needs for free: the original fitted outer boundary is
     untouched, and only the new seam edges are inset.
+
+    HOW MUCH OF THE LINE IS CUT depends on how the seam was placed.  A seam
+    with a placement `mode` (the direction tool, the optimiser) is bound to
+    the CHORD that was clicked: the hover preview showed one stretch of the
+    line, broken around the console, and the chord is what gets kerfed, plus
+    one seam gap of reach past the outline so the cut crosses the boundary
+    cleanly.  A legacy free seam (mode "") keeps the old whole-line
+    extension, so runs made before the direction tool behave exactly as they
+    did.
     """
 
     step = float(options["sample_step_mm"])
@@ -530,10 +650,26 @@ def split_panel(panel_id: int, outer: Loop, holes: Sequence[Loop], seams: Sequen
     # The extension below reaches a whole bbox diagonal in both directions, so
     # without this test a seam drawn over one panel silently slices another
     # panel metres away.
+    #
+    # A seam BOUND to this panel is now held to the same standard as the hover
+    # that placed it: its chord has to cross real material for at least
+    # MIN_CHORD_MM (the same floor `seamplace.seam_through` puts under a
+    # previewed chord), so a seam grazing a corner shaves nothing instead of
+    # nicking a sliver off it.
     relevant: list[Seam] = []
     for seam in seams:
         if seam.panel_id == panel_id:
-            relevant.append(seam)
+            chord = LineString([(seam.x1, seam.y1), (seam.x2, seam.y2)])
+            try:
+                crosses = panel.intersection(chord).length >= MIN_CHORD_MM
+            except (ValueError, TypeError):
+                continue
+            if crosses:
+                relevant.append(seam)
+            else:
+                warnings.append(
+                    f"panel {panel_id}: seam {seam.seam_id or '?'} crosses no material on this panel, "
+                    "so it cut nothing -- move it onto the deck or remove it")
         elif seam.panel_id is None:
             drawn = LineString([(seam.x1, seam.y1), (seam.x2, seam.y2)])
             if drawn.intersects(panel):
@@ -544,17 +680,47 @@ def split_panel(panel_id: int, outer: Loop, holes: Sequence[Loop], seams: Sequen
 
     reach = float(np.hypot(*(np.asarray(panel.bounds[2:]) - np.asarray(panel.bounds[:2])))) + 10.0
     half_gap = float(options["seam_gap_mm"]) / 2.0
-    kerfs = [s.extended(reach).buffer(half_gap, cap_style=2, join_style=2) for s in relevant]
+    seam_names = ", ".join(str(s.seam_id) or "?" for s in relevant)
+    kerfs = []
+    for seam in relevant:
+        # A moded seam keeps the chord it was given; a legacy free seam cuts
+        # the whole line.  The one-gap reach on the chord is enough to cross
+        # the outline because the hover that produced the chord trimmed it to
+        # the settled line's own crossings of that outline.
+        line = seam.extended(float(options["seam_gap_mm"]) if seam.chord_bound else reach)
+        kerf = line.buffer(half_gap, cap_style=2, join_style=2)
+        if not kerf.intersects(panel):
+            warnings.append(
+                f"panel {panel_id}: seam {seam.seam_id or '?'} crosses no material on this panel, "
+                "so it cut nothing -- move it onto the deck or remove it")
+            continue
+        kerfs.append(kerf)
+    if not kerfs:
+        piece = Piece(f"P{panel_id}", panel_id, outer, list(holes), float(panel.area))
+        return [piece], warnings
     remainder = panel.difference(unary_union(kerfs))
     if remainder.is_empty:
         return [], [f"panel {panel_id}: the seams removed the whole panel"]
 
     parts = list(remainder.geoms) if isinstance(remainder, MultiPolygon) else [remainder]
-    parts = [p for p in parts if p.area >= float(options["min_piece_area_mm2"])]
-    dropped = (1 if isinstance(remainder, Polygon) else len(remainder.geoms)) - len(parts)
-    if dropped > 0:
-        warnings.append(f"panel {panel_id}: dropped {dropped} sliver piece(s) below "
-                        f"{options['min_piece_area_mm2']:.0f} mm2")
+    min_area = float(options["min_piece_area_mm2"])
+    min_width = float(options.get("min_piece_width_mm", 0.0))
+    kept: list[Polygon] = []
+    dropped_area = dropped_width = 0
+    for part in parts:
+        if part.area < min_area:
+            dropped_area += 1
+            continue
+        if min_width > 0.0 and _narrower_than(part, min_width):
+            dropped_width += 1
+            continue
+        kept.append(part)
+    if dropped_area > 0:
+        warnings.append(f"panel {panel_id}: dropped {dropped_area} sliver piece(s) below "
+                        f"{min_area:.0f} mm2 (seams: {seam_names})")
+    if dropped_width > 0:
+        warnings.append(f"panel {panel_id}: dropped {dropped_width} sliver piece(s) narrower than "
+                        f"{min_width:.0f} mm (seams: {seam_names})")
 
     # Provenance for arc rebuilding: every sampled point of every original
     # loop, tagged with the loop it belongs to and the segment within it.
@@ -565,29 +731,67 @@ def split_panel(panel_id: int, outer: Loop, holes: Sequence[Loop], seams: Sequen
 
     pieces: list[Piece] = []
     tolerance = float(options["arc_rebuild_tolerance_mm"])
-    for index, part in enumerate(sorted(parts, key=lambda g: (-g.area, g.bounds))):
+    skipped = 0
+    fallbacks = 0
+    for part in sorted(kept, key=lambda g: (-g.area, g.bounds)):
         # CCW outer, CW holes -- the convention ingest.order_loops enforces for
         # every other loop this codebase emits.
         part = orient(part, 1.0)
-        outer_loop, worst = _rebuild_ring(np.asarray(part.exterior.coords)[:-1], sources, tolerance, step)
+        outer_loop, worst, ring_fallbacks = _rebuild_ring(
+            np.asarray(part.exterior.coords)[:-1], sources, tolerance, step)
+        fallbacks += ring_fallbacks
         hole_loops = []
         for ring in part.interiors:
-            rebuilt, err = _rebuild_ring(np.asarray(ring.coords)[:-1], sources, tolerance, step)
-            if len(rebuilt.vertices) >= 3:
+            rebuilt, err, ring_fallbacks = _rebuild_ring(
+                np.asarray(ring.coords)[:-1], sources, tolerance, step)
+            fallbacks += ring_fallbacks
+            # A rebuilt ring counts as area if it has three straight vertices
+            # OR is a two-vertex arc pair -- which is what a circle rebuilds
+            # to, and dropping it silently lost the 207 mm round cut-out out
+            # of every cut piece that contained it.
+            if len(rebuilt.vertices) >= 3 or _encloses_area(rebuilt.vertices):
                 hole_loops.append(rebuilt)
                 worst = max(worst, err)
-        if len(outer_loop.vertices) < 3:
-            warnings.append(f"panel {panel_id}: piece {index + 1} degenerated; skipped")
+            elif len(rebuilt.vertices):
+                warnings.append(
+                    f"panel {panel_id}: a cut-out was too small to rebuild on piece "
+                    f"P{panel_id}-{len(pieces) + 1} and was left out")
+        if not (len(outer_loop.vertices) >= 3 or _encloses_area(outer_loop.vertices)):
+            skipped += 1
+            warnings.append(f"panel {panel_id}: piece {len(pieces) + 1} degenerated; skipped")
             continue
         pieces.append(Piece(
-            piece_id=f"P{panel_id}-{index + 1}", panel_id=panel_id, outer=outer_loop,
+            # Numbered from the KEPT list: a skipped part used to eat an id, so
+            # "P1-3 needs a seam" pointed at a different piece after every edit.
+            piece_id=f"P{panel_id}-{len(pieces) + 1}", panel_id=panel_id, outer=outer_loop,
             holes=hole_loops, area_mm2=float(part.area), from_seam=True, max_arc_error_mm=worst,
+            arc_fallbacks=fallbacks,
         ))
     return pieces, warnings
 
 
+def _narrower_than(part: Polygon, limit_mm: float) -> bool:
+    """Is this part narrower, at its narrowest, than `limit_mm`?
+
+    The shorter side of the minimum rotated rectangle -- the smallest envelope
+    the part fits in at any turn.  A 1156 x 5.6 mm toothpick measures 5.6 mm
+    however long it is, while its AREA (6473 mm2) was always enough to pass the
+    old test.  The gunwale strips survive because they are 25 mm and up, well
+    over the floor.
+    """
+
+    import shapely
+
+    try:
+        envelope = shapely.minimum_rotated_rectangle(part)
+        width = min(envelope.bounds[2] - envelope.bounds[0], envelope.bounds[3] - envelope.bounds[1])
+    except (ValueError, TypeError):
+        return False
+    return width < limit_mm
+
+
 def _rebuild_ring(ring: np.ndarray, sources: Sequence[tuple[Loop, np.ndarray, np.ndarray]],
-                  tolerance_mm: float, step_mm: float) -> tuple[Loop, float]:
+                  tolerance_mm: float, step_mm: float) -> tuple[Loop, float, int]:
     """Attach provenance to a boolean-output ring, then rebuild its arcs.
 
     Provenance is decided per SEGMENT, from each segment's MIDPOINT: an edge
@@ -596,34 +800,60 @@ def _rebuild_ring(ring: np.ndarray, sources: Sequence[tuple[Loop, np.ndarray, np
     midpoint rather than the endpoints is what distinguishes the cut from the
     boundary it cuts -- a kerf edge's two endpoints both sit on the original
     boundary and would otherwise look like part of it.
+
+    Segment ids are namespaced by (loop, segment): every original loop -- the
+    outer boundary AND every cut-out -- contributes its own numbered segments
+    to one combined table, and a run of ring edges only collapses into an arc
+    when it came from one segment of one loop.  The previous behaviour kept a
+    single "dominant" loop per ring and flattened every edge from any other
+    loop into 1 mm straight vertices, which is how a cut piece's console walls
+    arrived in VCarve as thousands of nodes while its own outline kept its
+    arcs.
+
+    An edge whose midpoint lands on an original loop's own VERTEX (the first
+    sample of a segment) is treated as introduced.  That edge is the junction
+    chord where the kerf meets the boundary, and attributing it to either of
+    the two segments meeting there starts the arc run one sample into its
+    neighbour -- the three-point fit then fails its tolerance and the whole
+    fillet comes back as a polyline.  Marking the chord introduced keeps every
+    surviving run strictly inside one true arc.
     """
 
     from scipy.spatial import cKDTree
 
     if len(ring) < 3:
-        return Loop(np.zeros((0, 3))), 0.0
+        return Loop(np.zeros((0, 3))), 0.0, 0
     all_points = np.vstack([pts for _loop, pts, _src in sources])
     owner = np.concatenate([np.full(len(pts), i, dtype=np.int64)
                             for i, (_l, pts, _s) in enumerate(sources)])
     all_src = np.concatenate([src for _loop, _pts, src in sources])
+
+    # Where each segment's own samples begin, in the concatenated arrays: the
+    # (loop, segment) pair changes value exactly at an original vertex.
+    starts_run = np.empty(len(all_points), dtype=bool)
+    starts_run[0] = True
+    starts_run[1:] = (owner[1:] != owner[:-1]) | (all_src[1:] != all_src[:-1])
 
     midpoints = 0.5 * (ring + np.roll(ring, -1, axis=0))
     tree = cKDTree(all_points)
     distance, nearest = tree.query(midpoints, k=1, workers=-1)
     snap = max(step_mm * 0.75, 1e-6)
     on_original = distance <= snap
-    segment_source = np.where(on_original, all_src[nearest], -1)
+    # Combined table: loop index offsets each loop's segment ids past the ends
+    # of the loops before it, so (loop 1, seg 3) and (loop 2, seg 3) are
+    # different sources and an arc run can never span two loops.
+    loop_starts = np.cumsum([0] + [len(s[0].vertices) for s in sources])
     loop_of = np.where(on_original, owner[nearest], -1)
-
-    # Segment indices are only meaningful within one original loop, so rebuild
-    # against whichever loop supplied most of this ring and treat the rest as
-    # introduced edges.
-    if not (loop_of >= 0).any():
-        return rebuild_loop(ring, np.full(len(ring), -1, dtype=np.int64),
-                            Loop(np.zeros((0, 3))), tolerance_mm)
-    dominant = int(np.bincount(loop_of[loop_of >= 0], minlength=len(sources)).argmax())
-    segment_source = np.where(loop_of == dominant, segment_source, -1)
-    return rebuild_loop(ring, segment_source, sources[dominant][0], tolerance_mm)
+    seg_of = np.where(on_original, all_src[nearest], -1)
+    junction = on_original & starts_run[nearest]
+    segment_source = np.where(junction, -1,
+                              np.where(loop_of >= 0, loop_starts[np.clip(loop_of, 0, None)]
+                                       + np.clip(seg_of, 0, None), -1))
+    combined = Loop(np.vstack([s[0].vertices for s in sources]))
+    fallbacks: list[int] = []
+    loop, worst = rebuild_loop(ring, segment_source, combined, tolerance_mm,
+                               fallbacks=fallbacks)
+    return loop, worst, len(fallbacks)
 
 
 # --------------------------------------------------------------------------
@@ -669,8 +899,9 @@ def _encloses_area(vertices: np.ndarray) -> bool:
     semicircles, and that is what the fitter emits for a round part and for a
     round cut-out.  Dropping them lost a whole 187 mm circular panel out of the
     cut files with no warning, and left a 207 mm cut-out un-cut in the middle of
-    another part.  So a two-vertex loop counts, provided both ends really are
-    bowed: two straight vertices are a line and enclose nothing.
+    another part.  So a two-vertex loop counts provided at least one end really
+    is bowed: two straight vertices are a line and enclose nothing, but ONE
+    bowed end is a D shape and bounds area the same as a full circle does.
     """
 
     count = len(vertices)
@@ -680,13 +911,27 @@ def _encloses_area(vertices: np.ndarray) -> bool:
         return False
     bulges = np.abs(np.asarray(vertices, dtype=float)[:, 2])
     chord = float(np.hypot(*(vertices[1][:2] - vertices[0][:2])))
-    return bool(bulges.min() > 1e-9 and chord > 1e-9)
+    return bool(bulges.max() > 1e-9 and chord > 1e-9)
 
 
-def read_fitted_dxf(path: Path) -> tuple[dict[int, list[Loop]], dict[int, list[np.ndarray]], str | None]:
+# The fitted DXFs name their CAM loops CAM_USER__PANEL_n (the convention
+# `ingest.py` writes and every fitted run follows), and other things can share
+# the __PANEL_n suffix -- so the family prefix is part of the contract.
+_CAM_LAYER = re.compile(r"^CAM.*__PANEL_(\d+)$")
+
+
+def read_fitted_dxf(path: Path,
+                    warnings: list[str] | None = None) -> tuple[dict[int, list[Loop]], dict[int, list[np.ndarray]], str | None]:
     """CAM loops and pattern groove lines per panel from final_auto.dxf /
     final.dxf.  Bulges are read through unchanged: this is exactly the
-    geometry VCarve would otherwise have received."""
+    geometry VCarve would otherwise have received.
+
+    Only CLOSED CAM-layer polylines become loops, and anything skipped for
+    being open, unclosed or on a foreign layer is reported through `warnings`
+    when the caller passes a list: a file whose cut-out quietly goes missing
+    because its layer was named differently is a wrong cut file, and the only
+    thing worse than dropping it is dropping it silently.
+    """
 
     import ezdxf
 
@@ -703,9 +948,24 @@ def read_fitted_dxf(path: Path) -> tuple[dict[int, list[Loop]], dict[int, list[n
         except ValueError:
             continue
         if entity.dxftype() == "LWPOLYLINE" and not layer.startswith("PATTERN_"):
+            if not _CAM_LAYER.match(layer):
+                if warnings is not None:
+                    warnings.append(
+                        f"{Path(path).name}: skipped polyline on layer {layer!r} -- only CAM layers "
+                        "are cut")
+                continue
+            if not bool(entity.closed):
+                if warnings is not None:
+                    warnings.append(
+                        f"{Path(path).name}: skipped an OPEN polyline on {layer} -- a cut loop "
+                        "has to close")
+                continue
             vertices = np.asarray([(x, y, b) for x, y, b in entity.get_points("xyb")], dtype=float)
             if _encloses_area(vertices):
                 loops.setdefault(pid, []).append(Loop(vertices))
+            elif warnings is not None:
+                warnings.append(
+                    f"{Path(path).name}: skipped a two-point line on {layer} that encloses no area")
         elif entity.dxftype() == "LINE" and layer.startswith("PATTERN_"):
             if kind is None:
                 kind = layer.split(_PANEL_SUFFIX)[0].replace("PATTERN_", "").lower()
@@ -730,10 +990,23 @@ def classify_loops(loops: Sequence[Loop], step_mm: float) -> tuple[Loop | None, 
     return loops[outer_index], [loop for i, loop in enumerate(loops) if i != outer_index]
 
 
+# How much float noise a piece may carry past the envelope and still count as
+# fitting.  The nester's own grid test already allows 1e-9; the report has to
+# agree with it or a piece measures "too big" here that the nester placed
+# happily -- an exact 990.6 x 2006.6 mm rectangle on a 3.68 degree axis came
+# out 1.4e-13 mm over purely from the rotation's trigonometry.
+ENVELOPE_TOLERANCE_MM = 1e-6
+
+
 def oversize_report(pieces: Sequence[Piece], rotation: np.ndarray,
                     options: dict[str, Any]) -> list[dict[str, Any]]:
     """Pieces that still will not fit a sheet, and by how much, so the user
-    knows where another seam is needed."""
+    knows where another seam is needed.
+
+    Sizes are carried at ONE decimal and printed from that same number, so the
+    same piece cannot read "616 x 2413" in one line and "617 x 2413" in the
+    next (which is what rounding twice used to produce).
+    """
 
     limit_w = float(options["max_part_width_mm"])
     limit_l = float(options["max_part_length_mm"])
@@ -741,7 +1014,7 @@ def oversize_report(pieces: Sequence[Piece], rotation: np.ndarray,
     report = []
     for piece in pieces:
         width, length = oriented_extent(piece, rotation, step)
-        if width <= limit_w and length <= limit_l:
+        if width <= limit_w + ENVELOPE_TOLERANCE_MM and length <= limit_l + ENVELOPE_TOLERANCE_MM:
             continue
         report.append({
             "piece_id": piece.piece_id, "panel_id": piece.panel_id,

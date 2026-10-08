@@ -251,21 +251,33 @@ def snapped_seams(run_dir: Path, config: dict[str, Any],
 
 
 def apply_snap(seams: Sequence[Seam], loops: dict[int, list[Any]], axis: np.ndarray | None,
-               options: dict[str, Any]) -> tuple[list[Seam], list[SnapResult], list[str]]:
+               options: dict[str, Any],
+               references: list[Any] | None = None) -> tuple[list[Seam], list[SnapResult], list[str]]:
     """Straighten a seam list against an axis and a set of fitted loops.
 
     Split out from `snapped_seams` so that `plan`, which has already read the
     DXF and resolved the frame for the cut, straightens the seams against
     exactly those and not against a second reading of the same files.
 
+    `references` may carry a pool the caller already built (the app caches one
+    per fitted DXF for the hover, and the hover's settle has to be the SAME
+    correction the click gets or the line jumps between them).  It defaults to
+    being built here from `loops`.
+
     The reference pool is built here rather than handed to `seamsnap.snap_seams`
     because of the per-seam opt out: a seam with `snap` False is left exactly
     where the user placed it, but it is still a real join on the deck, so the
     seams drawn after it must be able to line up with WHERE IT IS -- not with
     where the corrector would have put it.
+
+    Each seam is offered only the references on the panel it cuts.  The pool
+    spans the whole nested layout, where panels that are metres apart on the
+    boat sit side by side, and without that restriction a join on one panel
+    could slide onto a stub of edge or seam on another (audit A6).
     """
 
-    references = seamsnap.axis_references(axis) + seamsnap.references_from_loops(loops, options)
+    if references is None:
+        references = seamsnap.axis_references(axis) + seamsnap.references_from_loops(loops, options)
     enabled = bool(options.get("seam_snap_enabled", True))
     min_ref = float(options["seam_snap_min_ref_length_mm"])
 
@@ -298,7 +310,9 @@ def apply_snap(seams: Sequence[Seam], loops: dict[int, list[Any]], axis: np.ndar
             locked = bool(seam.mode) and not mode_warning
             result = _restated(seam, drawn,
                                seamsnap.snap_seam(*aimed, pool, options, axis=axis,
-                                                  direction_locked=locked))
+                                                  direction_locked=locked,
+                                                  panel_ids=([int(seam.panel_id)]
+                                                             if seam.panel_id is not None else None)))
         for warning in result.warnings:
             if warning not in warnings:
                 warnings.append(warning)
@@ -430,12 +444,14 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
         )
 
     seam_list = list(seams) if seams is not None else sheets_mod.read_seams(run_dir)
+    warnings: list[str] = []
     progress(f"Reading fitted geometry from {source.name}")
-    loops, pattern, pattern_kind = sheets_mod.read_fitted_dxf(source)
+    loops, pattern, pattern_kind = sheets_mod.read_fitted_dxf(source, warnings)
     if not loops:
         raise ValueError(f"{source.name} contains no CAM loops")
 
-    frame, warnings = resolve_frame(run_dir, options)
+    frame, frame_warnings = resolve_frame(run_dir, options)
+    warnings.extend(frame_warnings)
     axis, confidence = frame.axis, frame.confidence
     rotation = sheets_mod.sheet_transform(axis)
 
@@ -461,8 +477,8 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
     oversize = sheets_mod.oversize_report(pieces, rotation, options)
     for item in oversize:
         warnings.append(
-            f"piece {item['piece_id']} is {item['width_mm']:.0f} x {item['length_mm']:.0f} mm, "
-            f"over by {item['over_width_mm']:.0f} x {item['over_length_mm']:.0f} mm -- {item['hint']}"
+            f"piece {item['piece_id']} is {item['width_mm']:.1f} x {item['length_mm']:.1f} mm, "
+            f"over by {item['over_width_mm']:.1f} x {item['over_length_mm']:.1f} mm -- {item['hint']}"
         )
 
     progress(f"Nesting {len(pieces)} piece(s) on "
@@ -483,6 +499,7 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
             run_dir, sheet_list, by_id, rotation, pattern, pattern_kind, options,
             progress=progress, warnings=warnings,
         )
+        _remove_stale_sheet_dxfs(run_dir, files, progress)
 
     refused = [item for entry in files for item in (entry.get("refused") or [])]
     worst_arc = max((p.max_arc_error_mm for p in pieces), default=0.0)
@@ -507,6 +524,10 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
         "files": files,
         "warnings": warnings,
         "max_arc_rebuild_error_mm": round(worst_arc, 4),
+        # How many arc runs the rebuild refitted as polylines.  Zero on a
+        # healthy split; `max_arc_rebuild_error_mm` only counts the arcs that
+        # PASSED, so this is the only number that can see flattening.
+        "arc_fallbacks": int(sum(p.arc_fallbacks for p in pieces)),
         "boat_axis": None if axis is None else [round(float(v), 6) for v in axis],
         "boat_axis_confidence": round(confidence, 4),
         "boat_frame": frame.to_dict(),
@@ -528,10 +549,59 @@ def plan(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = N
             for s in sheet_list
         ],
     }
+    # A refused piece never made it into the file, so it must not be counted as
+    # using the sheet either: "sheet 3, 62% used" with a part missing reads as
+    # a job that fits when it does not.  Its placement row keeps the id (the
+    # report still has to name it) but carries "(not written)".
+    if refused:
+        blocked = {item["piece_id"] for item in refused}
+        sheet_area = float(options["sheet_width_mm"]) * float(options["sheet_length_mm"])
+        for sheet_row in result["sheets"]:
+            missing = [p for p in sheet_row["placements"] if p["piece_id"] in blocked]
+            if not missing:
+                continue
+            lost = sum(by_piece_area(by_id, p["piece_id"]) for p in missing)
+            sheet_row["utilisation"] = round(
+                max(0.0, sheet_row["utilisation"] - lost / sheet_area), 4)
+            for p in sheet_row["placements"]:
+                if p["piece_id"] in blocked:
+                    p["not_written"] = True
     if write_files:
-        (run_dir / "sheets.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        (run_dir / "sheets.json").write_text(json.dumps(result, indent=2),
+                                             encoding="utf-8", newline="\n")
         _write_report(run_dir / "sheet_report.md", result, options)
     return result
+
+
+def by_piece_area(by_id: dict[str, Piece], piece_id: str) -> float:
+    piece = by_id.get(piece_id)
+    return float(piece.area_mm2) if piece is not None else 0.0
+
+
+def _remove_stale_sheet_dxfs(run_dir: Path, files: Sequence[dict[str, Any]],
+                             progress: Progress | None = None) -> None:
+    """Delete every sheet DXF this export did not write.
+
+    The files are numbered, and a re-export that needs FEWER sheets used to
+    leave the old higher-numbered ones sitting beside the new set with working
+    download links -- "sheet 4 (0 pieces)" offered next to a two-sheet job, and
+    nothing anywhere said it was from an older, bigger layout.  They are
+    deleted instead, so what is on disk is always exactly the last export.
+    """
+
+    import re as _re
+
+    say = progress or _silent
+    written = {entry.get("name") for entry in files}
+    pattern = _re.compile(r"^sheet_\d{2,3}\.dxf$")
+    for path in sorted(Path(run_dir).glob("sheet_*.dxf")):
+        if path.name in written or not pattern.match(path.name):
+            continue
+        try:
+            path.unlink()
+            say(f"Removed {path.name} -- it was left over from a bigger layout")
+        except OSError as error:
+            say(f"warning: could not remove the stale {path.name} ({error})")
 
 
 def preview(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None = None) -> dict[str, Any]:
@@ -610,11 +680,22 @@ def preview(run_dir: Path, config: dict[str, Any], seams: Sequence[Seam] | None 
 
 
 def exported_sheets(run_dir: Path) -> list[dict[str, Any]]:
-    """Sheet DXFs already written for this run, newest export first."""
+    """Sheet DXFs already written for this run, newest export first.
 
-    written = json.loads((Path(run_dir) / "sheets.json").read_text(encoding="utf-8")) \
-        if (Path(run_dir) / "sheets.json").is_file() else {}
+    An entry is marked `stale` when the seams on disk have changed since the
+    export was made -- the file is from an older, different layout, and the
+    page says so beside its download link instead of offering it as though it
+    matched the seams on screen.
+    """
+
+    run_dir = Path(run_dir)
+    written = json.loads((run_dir / "sheets.json").read_text(encoding="utf-8")) \
+        if (run_dir / "sheets.json").is_file() else {}
     by_name = {entry.get("name"): entry for entry in (written.get("files") or [])}
+    exported_seam_ids = [str(s.get("seam_id"))
+                         for s in (written.get("seams") or [])]
+    live_seam_ids = [str(s.seam_id) for s in sheets_mod.read_seams(run_dir)]
+    stale = exported_seam_ids != live_seam_ids
     files: list[dict[str, Any]] = []
     for path in sorted(Path(run_dir).glob("sheet_*.dxf")):
         entry = dict(by_name.get(path.name) or {})
@@ -623,6 +704,7 @@ def exported_sheets(run_dir: Path) -> list[dict[str, Any]]:
         entry.setdefault("pieces", [])
         entry.setdefault("utilisation", 0.0)
         entry["exists"] = True
+        entry["stale"] = bool(stale or not by_name.get(path.name))
         files.append(entry)
     return files
 
@@ -650,15 +732,18 @@ def _write_report(path: Path, result: dict[str, Any], options: dict[str, Any]) -
     if result["sheets"]:
         lines += ["## Sheets", "", "| sheet | pieces | utilisation |", "|---|---|---:|"]
         for sheet in result["sheets"]:
-            names = ", ".join(p["piece_id"] for p in sheet["placements"]) or "-"
+            names = ", ".join(
+                p["piece_id"] + (" *(not written)*" if p.get("not_written") else "")
+                for p in sheet["placements"]) or "-"
             lines.append(f"| {sheet['sheet']} | {names} | {sheet['utilisation'] * 100:.1f}% |")
         lines.append("")
         lines += ["## Placements", "",
                   "| sheet | piece | panel | rotation | size mm | position mm |", "|---|---|---|---:|---|---|"]
         for sheet in result["sheets"]:
             for p in sheet["placements"]:
+                marker = " *(not written)*" if p.get("not_written") else ""
                 lines.append(
-                    f"| {sheet['sheet']} | {p['piece_id']} | {p['panel_id']} | {p['rotation_deg']} deg | "
+                    f"| {sheet['sheet']} | {p['piece_id']}{marker} | {p['panel_id']} | {p['rotation_deg']} deg | "
                     f"{p['width_mm']:.0f} x {p['length_mm']:.0f} | "
                     f"({p['offset_mm'][0]:.0f}, {p['offset_mm'][1]:.0f}) |")
         lines.append("")
@@ -666,8 +751,8 @@ def _write_report(path: Path, result: dict[str, Any], options: dict[str, Any]) -
         lines += ["## Still too big for a sheet", "",
                   "These need another seam before they can be cut:", ""]
         for item in result["oversize"]:
-            lines.append(f"- **{item['piece_id']}** {item['width_mm']:.0f} x {item['length_mm']:.0f} mm "
-                         f"(over by {item['over_width_mm']:.0f} x {item['over_length_mm']:.0f} mm) -- {item['hint']}")
+            lines.append(f"- **{item['piece_id']}** {item['width_mm']:.1f} x {item['length_mm']:.1f} mm "
+                         f"(over by {item['over_width_mm']:.1f} x {item['over_length_mm']:.1f} mm) -- {item['hint']}")
         lines.append("")
     if result.get("refused"):
         lines += ["## Left out of the sheet files", "",
@@ -680,4 +765,4 @@ def _write_report(path: Path, result: dict[str, Any], options: dict[str, Any]) -
     if result["warnings"]:
         lines += ["## Warnings", ""] + [f"- {w}" for w in result["warnings"]] + [""]
     lines += ["Manufacturing approval stays TEST_ONLY until a human has physically verified a cut.", ""]
-    path.write_text("\n".join(lines), encoding="utf-8")
+    path.write_text("\n".join(lines), encoding="utf-8", newline="\n")

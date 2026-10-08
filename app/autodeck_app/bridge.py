@@ -62,9 +62,14 @@ def run_files(run_dir: Path) -> dict[str, bool]:
              "outline_report.md", "autofit_report.md", "final_report.md", "calibration_report.md",
              # seams_previous.json is the copy the seam optimiser takes before it
              # replaces anything, so it has to be listed or the user cannot get
-             # their hand-placed seams back.
-             "run.json", "sheet_report.md", "seams_previous.json"]
+             # their hand-placed seams back.  The numbered copies are the older
+             # ones stepped aside by later presses, and seams_hand.json is the
+             # first hand-placed set, kept for good -- same reason for all of
+             # them: an unlisted backup is a backup nobody knows they have.
+             "run.json", "sheet_report.md", "seams.json", "seams_previous.json", "seams_hand.json"]
     files = {name: (run_dir / name).is_file() for name in names}
+    for path in sorted(run_dir.glob("seams_previous_*.json")):
+        files[path.name] = True
     # Sheet DXFs are numbered and there can be any number of them.
     for path in sorted(run_dir.glob("sheet_*.dxf")):
         files[path.name] = True
@@ -243,10 +248,15 @@ def seam_world_polylines(view: "RunView", seams: Any, options: dict[str, Any]) -
 
     A seam is stored as a straight line in the flat layout, but the cut runs
     across a curved deck, so the line has to be clipped to the part, chopped up
-    and lifted through the same smooth surface fit the CAM overlay uses.  It is
-    clipped exactly the way `sheets.split_panel` cuts -- the whole chord across
-    the panel, holes taken out -- so what is drawn over the model is the join the
-    user will actually see, not the stub they happened to drag.
+    and lifted through the same smooth surface fit the CAM overlay uses.
+
+    HOW MUCH of the line is drawn follows how the seam will be CUT (see
+    `sheets.Seam.chord_bound`): a seam placed with a direction tool is its own
+    chord -- the stretch that was hovered and clicked, broken around the
+    console -- and only that chord goes on the deck.  A legacy free seam is cut
+    as the whole line, so the whole line is drawn, chords of the panel it
+    crosses, holes taken out.  Drawing one thing and cutting another is exactly
+    the defect this halves of the pipeline used to have.
     """
 
     _config_mod, _sheetjob, _sheets_mod, seamplace = _sheet_modules()
@@ -257,6 +267,16 @@ def seam_world_polylines(view: "RunView", seams: Any, options: dict[str, Any]) -
         length = float(np.hypot(*unit))
         if length < 1e-9 or not polygons:
             out.append({"seam_id": seam.seam_id, "world": []})
+            continue
+        if seam.chord_bound:
+            pid = seam.panel_id
+            if pid is None or pid not in view.placements or pid not in view.lifters:
+                out.append({"seam_id": seam.seam_id, "world": []})
+                continue
+            ends = np.array([[seam.x1, seam.y1], [seam.x2, seam.y2]])
+            dense = _densify(ends, SEAM_WORLD_STEP_MM)
+            out.append({"seam_id": seam.seam_id,
+                        "world": [_rounded(lift_proud(view, pid, _unplace(view.placements[pid], dense)))]})
             continue
         crossed = seamplace.panels_crossed(seam.x1, seam.y1, seam.x2, seam.y2,
                                            polygons, options, seam.panel_id)
@@ -274,6 +294,34 @@ def seam_world_polylines(view: "RunView", seams: Any, options: dict[str, Any]) -
     return out
 
 
+# How a seam with no id of its own is named on the way in: the next free
+# "s<number>".  Naming by LIST POSITION (the old s{i + 1}) is what let
+# remove-then-place produce two seams called s4 -- the survivor kept its old
+# name and the newcomer was given the same one by index -- and everything that
+# merges replies by id then silently conflated them.
+_S_ID = re.compile(r"^s(\d+)$")
+
+
+def _fresh_seam_ids(seams: list[dict[str, Any]]) -> None:
+    """Give every id-less seam in the posted list a unique id, in place.
+
+    The number is the next free one past the highest `s<n>` already in the
+    list, so a seam removed and a seam placed in the same breath can never end
+    up sharing a name, and a reply merged by id can never overwrite one seam
+    with another.
+    """
+
+    highest = 0
+    for seam in seams:
+        match = _S_ID.match(str(seam.get("seam_id") or ""))
+        if match:
+            highest = max(highest, int(match.group(1)))
+    for seam in seams:
+        if not seam.get("seam_id"):
+            highest += 1
+            seam["seam_id"] = f"s{highest}"
+
+
 def sheet_preview(run_dir: Path, overrides: dict[str, Any],
                   seams: list[dict[str, Any]] | None = None, save: bool = False,
                   view: "RunView | None" = None) -> dict[str, Any]:
@@ -287,21 +335,34 @@ def sheet_preview(run_dir: Path, overrides: dict[str, Any],
 
     _config_mod, sheetjob, sheets_mod, _seamplace = _sheet_modules()
     config = _sheet_config(overrides)
-    resolved = sheets_mod.settings(config)
     if seams is not None:
-        parsed = [sheets_mod.Seam.from_dict({**s, "seam_id": s.get("seam_id") or f"s{i + 1}"})
-                  for i, s in enumerate(seams)]
+        _fresh_seam_ids(seams)
+        parsed = [sheets_mod.Seam.from_dict(s) for s in seams]
+        if save:
+            # The edit lands on disk BEFORE anything is planned.  A re-plan can
+            # refuse (no fitted geometry, a setting that cannot be cut with),
+            # and "removing seams must always work" cannot depend on the plan's
+            # good humour: the removal -- or any edit -- is stored first, and
+            # if the plan then succeeds the corrected list overwrites it a
+            # moment later with exactly the same seams as cut.
+            sheets_mod.write_seams(run_dir, parsed)
     else:
         parsed = sheets_mod.read_seams(run_dir)
+    resolved = sheets_mod.settings(config)
 
     frame, axis_warnings = sheetjob.resolve_frame(run_dir, resolved)
     if sheetjob.source_dxf(run_dir) is None:
         if save:
             sheets_mod.write_seams(run_dir, parsed)
-        return {"available": False,
-                "reason": "run auto-fit (or ingest a drawing) first -- sheets are cut from the fitted outline",
-                "seams": [_seam_payload(s, None) for s in parsed], "settings": resolved,
-                "boat": _boat_payload(frame, axis_warnings)}
+        result = {"available": False,
+                  "reason": "run auto-fit (or ingest a drawing) first -- sheets are cut from the fitted outline",
+                  "seams": [_seam_payload(s, None) for s in parsed], "settings": resolved,
+                  "boat": _boat_payload(frame, axis_warnings)}
+        if view is not None:
+            # The flat view still needs the panel layout to draw itself bow up
+            # and un-nested, fitted geometry or not (audit F48).
+            result["panels"] = _panel_layout(view)
+        return result
 
     result = sheetjob.preview(run_dir, config, seams=parsed)
     # The seams AS CUT, straightened once by sheetjob and reported here so the
@@ -424,7 +485,16 @@ def seam_hover(view: "RunView", overrides: dict[str, Any], mode: str,
         # documented contract and left the page with nothing to say.
         return dict(off_deck, point_flat=[round(float(point[0]), 2), round(float(point[1]), 2)])
 
-    segments = _settled(view, options, segments, unit)
+    # The settle pool is exactly what `sheetjob.apply_snap` will offer the
+    # clicked chord: the boat's two directions, the fitted edges, and the seams
+    # already on the deck (which are stored in their corrected positions).
+    # Settling against anything else is how the preview and the cut came to
+    # disagree by a fraction of a millimetre.
+    from autodeck2 import seamsnap
+    references = (seamsnap.axis_references(frame.axis)
+                  + edge_references(view, options) + seam_references(view, options))
+    segments = _settled(view, options, segments, unit, mode, angle_deg, frame.axis,
+                        point, references)
     # The endpoints are NOT rounded: the page stores whichever chord the user
     # clicks as the seam's `raw`, and rounding it to a hundredth of a millimetre
     # would knock it off the master direction just enough that the corrector
@@ -540,47 +610,58 @@ def seam_references(view: "RunView", options: dict[str, Any]) -> list[Any]:
 
 
 def _settled(view: "RunView", options: dict[str, Any],
-             segments: list[dict[str, Any]], unit: np.ndarray) -> list[dict[str, Any]]:
+             segments: list[dict[str, Any]], unit: np.ndarray,
+             mode: str, angle_deg: float | None, axis: Any,
+             point: np.ndarray, references: list[Any]) -> list[dict[str, Any]]:
     """Each hovered chord slid onto a fitted edge that runs the same way, if one
     is near enough -- the corrector's rule 2, applied before the click instead of
     after it.
 
-    Each chord is settled on its own, because each is a seam the user could
-    click and the corrector will treat each on its own too.  The chord is only
-    translated, never turned, so its direction is still exactly the one that was
-    chosen; and settling a chord that is already on the edge moves it nowhere,
-    so hovering the same place twice draws the same line.
+    The settle IS the correction now, not an approximation of it: each chord is
+    wrapped in a real `sheets.Seam` with its mode and panel and pushed through
+    `sheetjob.apply_snap` against the same reference pool the click will use,
+    so the line the user commits is bit for bit the line that gets cut.  The
+    two used to be two slightly different slidings of the same chord, and the
+    difference (up to 0.87 mm) is what "the note says it moved although the
+    preview had settled" was.
 
     A chord that did move is then re-trimmed to its panel, because the ends of
     the old chord were the old line's crossings of the outline and the new line
-    crosses it somewhere else.  Without that the preview would hang past the
-    edge of the part by as much as the slide.
+    crosses it somewhere else.  Of the chords the re-trim offers, the one kept
+    is the one whose stretch BRACKETS THE POINTER -- not the one whose middle
+    is nearest the slid middle.  Sweeping along the boat beside the console,
+    the slid middle sits under the console where there is no chord at all, and
+    nearest-the-middle used to answer with the far side of it: the preview
+    vanished for a hundred millimetres exactly where the user was aiming.
     """
 
-    _config_mod, _sheetjob, _sheets_mod, seamplace = _sheet_modules()
-    from autodeck2 import seamsnap
+    _config_mod, sheetjob, _sheets_mod, seamplace = _sheet_modules()
 
     if not bool(options.get("seam_snap_enabled", True)):
-        return segments
-    # Fitted edges AND the seams already on the deck, because `apply_snap` will
-    # offer both to this chord the moment it is clicked -- see `seam_references`.
-    references = edge_references(view, options) + seam_references(view, options)
-    if not references:
         return segments
     _loops, polygons = panel_shapes(view, options)
 
     settled: list[dict[str, Any]] = []
     for segment in segments:
-        result = seamsnap.snap_seam(segment["x1"], segment["y1"], segment["x2"], segment["y2"],
-                                    references, options, direction_locked=True)
-        if not result.applied:
+        raw = (segment["x1"], segment["y1"], segment["x2"], segment["y2"])
+        hover = _sheets_mod.Seam("hover", *raw, panel_id=int(segment["panel_id"]),
+                                 snap=True, raw=raw, mode=mode, angle_deg=angle_deg)
+        try:
+            (cut,), (_snap,), _w = sheetjob.apply_snap([hover], _loops, axis, options,
+                                                       references=list(references))
+        except (ValueError, TypeError):
             settled.append(segment)
             continue
-        middle = np.array([(result.x1 + result.x2) / 2.0, (result.y1 + result.y2) / 2.0])
+        moved = max(abs(cut.x1 - raw[0]), abs(cut.y1 - raw[1]),
+                    abs(cut.x2 - raw[2]), abs(cut.y2 - raw[3]))
+        if moved <= 1e-6:
+            settled.append(segment)
+            continue
+        middle = np.array([(cut.x1 + cut.x2) / 2.0, (cut.y1 + cut.y2) / 2.0])
         panel_id = int(segment["panel_id"])
         again = seamplace.seam_through(middle, unit, polygons, options, panel_ids=[panel_id])
         if again:
-            settled.append(min(again, key=lambda s: abs(_midpoint_gap(s, middle))))
+            settled.append(_chord_under_pointer(again, point, unit, middle))
         else:
             # The slide took the line off the part altogether, which only a
             # reference right at the edge could do. Keep what was previewed.
@@ -588,14 +669,31 @@ def _settled(view: "RunView", options: dict[str, Any],
     return settled
 
 
-def _midpoint_gap(segment: dict[str, Any], point: np.ndarray) -> float:
-    """How far a chord's middle is from `point` -- the tie-break that picks the
-    chord the pointer is actually on when a settled line crosses a cut-out and
-    comes back as two."""
+def _chord_under_pointer(chords: list[dict[str, Any]], point: np.ndarray,
+                         unit: np.ndarray, anchor: np.ndarray) -> dict[str, Any]:
+    """The chord whose stretch along the line contains the pointer's foot.
 
-    middle = np.array([(segment["x1"] + segment["x2"]) / 2.0,
-                       (segment["y1"] + segment["y2"]) / 2.0])
-    return float(np.hypot(*(middle - point)))
+    `anchor` is any point on the settled line; each chord's parameter range is
+    measured from it along `unit`, and the pointer's own parameter has to fall
+    inside one of them (with a couple of millimetres of grace for the click
+    being at the very end of a chord).  Nothing brackets it -- the pointer is
+    over the console -- and the nearest chord by parameter distance stands in,
+    which is the old behaviour for that one honest case.
+    """
+
+    where = float(np.dot(point - anchor, unit))
+    best: dict[str, Any] | None = None
+    best_gap = float("inf")
+    for chord in chords:
+        start = float(np.dot(np.array([chord["x1"], chord["y1"]]) - anchor, unit))
+        end = float(np.dot(np.array([chord["x2"], chord["y2"]]) - anchor, unit))
+        low, high = (start, end) if start <= end else (end, start)
+        if low - 2.0 <= where <= high + 2.0:
+            return chord
+        gap = low - where if where < low else where - high
+        if gap < best_gap:
+            best, best_gap = chord, gap
+    return best if best is not None else chords[0]
 
 
 def job_sheets(run_dir: Path, overrides: dict[str, Any], log: Log) -> dict[str, Any]:
@@ -624,6 +722,12 @@ OPTIMISE_BUDGET_S = 90.0
 # name and not a directory of versions on purpose: one obvious thing to open
 # when the answer is wrong, listed with every other file the run produced.
 SEAMS_BACKUP = "seams_previous.json"
+
+# The FIRST hand-placed seam set, kept under a name the optimiser never rotates
+# away, so the fabricator's original work survives any number of presses.  It
+# is written once, the first time the button is pressed on a run that already
+# has seams, and never overwritten after that.
+SEAMS_HAND = "seams_hand.json"
 
 
 def _keep_older_backup(backup: Path, log: Log) -> None:
@@ -678,6 +782,19 @@ def job_optimise_seams(run_dir: Path, overrides: dict[str, Any], log: Log,
     log(f"Working out the best seam positions. This run has {len(existing)} seam(s) now; "
         f"searching for up to {float(time_budget_s):.0f} seconds.")
 
+    # The backup's CONTENT is decided now, before the search starts, though the
+    # file itself is only written once the answer is about to be saved.  The
+    # search runs for a minute and a half, and the seams it read at the start
+    # used to be copied at the end -- so a set the user changed mid-search never
+    # made it into the backup, and an undo restored three of four seams with the
+    # fourth gone for good.  Holding the pressed bytes also means a refusal or
+    # a no-improvement press touches nothing on disk at all.
+    source = Path(run_dir) / "seams.json"
+    backup = Path(run_dir) / SEAMS_BACKUP
+    hand = Path(run_dir) / SEAMS_HAND
+    pressed_at = source.stat().st_mtime_ns if source.is_file() else None
+    pressed_bytes = source.read_bytes() if source.is_file() else None
+
     result = seamplan.optimise(run_dir, config, progress=log, time_budget_s=float(time_budget_s))
     report = result["report"]
     for warning in report.get("warnings") or []:
@@ -718,25 +835,35 @@ def job_optimise_seams(run_dir: Path, overrides: dict[str, Any], log: Log,
         log(f"Nothing was changed -- the {len(existing)} seam(s) already on this run are untouched.")
         return payload
 
-    # Copy first, write second.  If anything below fails, the user still has
-    # both their original seams.json and a copy of it.
-    #
-    # The copy is numbered rather than overwritten. One slot was demonstrably
-    # not enough: press the button at a short budget, press it again at a long
-    # one, and the "backup" holds the machine's own first answer while the
-    # fabricator's hand-placed seams are gone for good. Undo still reads
-    # seams_previous.json, so the newest copy keeps that name and the older ones
-    # step aside under a numbered name in the same folder, listed with every
-    # other file the run produced.
-    source = Path(run_dir) / "seams.json"
-    backup = Path(run_dir) / SEAMS_BACKUP
+    # The seams the search read were the ones on disk when it started.  If the
+    # file has changed since -- an edit from another tab, a save that raced the
+    # job -- then overwriting it would throw away work the search never saw,
+    # so the answer is dropped instead and the newer seams stand.
+    if pressed_at is not None and source.is_file() and source.stat().st_mtime_ns != pressed_at:
+        payload["improved"] = False
+        payload["reason"] = ("the seams on this run changed while the search was running, so its "
+                             "answer was thrown away rather than write over them. Press the button "
+                             "again if you still want it.")
+        log(payload["reason"])
+        return payload
+
+    # The write is happening, so now is the moment to commit the backup: the
+    # numbered rotation first, then the copy of exactly what was pressed, then
+    # the once-only hand copy.  Nothing here can fail the write -- if a rename
+    # or copy fails, the log says so and the optimiser's seams still land.
     _keep_older_backup(backup, log)
-    if source.is_file():
-        shutil.copyfile(source, backup)
+    if pressed_bytes is not None:
+        backup.write_bytes(pressed_bytes)
     else:
         backup.write_text(json.dumps({"seams": []}, indent=2), encoding="utf-8")
     log(f"Copied the {len(existing)} seam(s) that were here to {SEAMS_BACKUP} -- "
         "download it from the file list to get them back.")
+    if existing and not hand.is_file():
+        # The first hand-placed set, kept for good: however many times the
+        # button is pressed, this one name always holds the work that was on
+        # the deck before any automatic layout touched it.
+        hand.write_bytes(pressed_bytes)
+        log(f"Kept a copy of these as {SEAMS_HAND} -- it stays even if you press the button again.")
 
     saved = sheet_preview(run_dir, overrides,
                           seams=[seam.to_dict() for seam in result["seams"]], save=True)

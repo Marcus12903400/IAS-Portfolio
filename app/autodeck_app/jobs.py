@@ -10,6 +10,17 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
+class JobBusy(RuntimeError):
+    """Raised by `start` when another job is already running.
+
+    The routes check `active()` before starting, but the check and the start
+    took the manager's lock in two separate steps -- so two requests arriving
+    together could both pass the check and both start, and the engine is not
+    re-entrant.  `start` now refuses under its own lock, and the server maps
+    this to the same 409 the pre-check produces.
+    """
+
+
 @dataclass
 class Job:
     job_id: str
@@ -41,6 +52,12 @@ class JobManager:
     def start(self, kind: str, fn: Callable[[Callable[[str], None]], Any], meta: dict[str, Any] | None = None) -> Job:
         job = Job(job_id=uuid.uuid4().hex[:12], kind=kind, meta=dict(meta or {}))
         with self._lock:
+            # The refusal happens under the same lock that registers this job,
+            # so "is anything running" and "book me in" are one decision and
+            # not two that a second request can slip between.
+            for other in self._jobs.values():
+                if other.status in ("queued", "running"):
+                    raise JobBusy(f"a job is already running ({other.kind})")
             self._jobs[job.job_id] = job
 
         def log(message: str) -> None:
@@ -56,7 +73,10 @@ class JobManager:
                     job.status = "done"
                 except Exception as exc:  # noqa: BLE001 - surfaced to the UI
                     job.status = "error"
-                    job.error = f"{type(exc).__name__}: {exc}"
+                    # The class name is stripped on purpose: this text goes to
+                    # the fabricator, and "ValueError:" is a programmer's word
+                    # for what is otherwise a perfectly readable sentence.
+                    job.error = str(exc) or type(exc).__name__
                     log(f"ERROR {job.error}")
                     for line in traceback.format_exc().strip().splitlines()[-6:]:
                         log("    " + line)
@@ -75,4 +95,4 @@ class JobManager:
             for job in self._jobs.values():
                 if job.status in ("queued", "running"):
                     return job
-        return None
+            return None

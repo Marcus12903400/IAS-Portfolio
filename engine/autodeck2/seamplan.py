@@ -177,7 +177,45 @@ SWEEP_STEP_MM = 50.0
 # How close to a master direction a fitted edge has to run before its offset is
 # offered as a cut position.  Two degrees, not the corrector's five: this is
 # asking "is that edge square to the boat", and an edge two degrees out is not.
+# (The alignment CREDIT has its own, much tighter window -- ALIGNMENT_CREDIT_MM
+# -- because these seams are placed with snap=False and nothing ever slides
+# them the last few millimetres onto an edge.  Offering the position is cheap
+# and honest; claiming the cut is ON the edge has to be earned.)
 EDGE_TOLERANCE_DEG = 2.0
+
+# A cut is only credited as running on a fitted edge when it is this close to
+# the edge's line.  The old credit window was `seam_snap_offset_mm` (25 mm) on
+# the assumption that the corrector would slide the cut the rest of the way --
+# and it measurably did not (0 of 222 generated seams moved), so seams the
+# report called "on fitted edges" sat 4 to 9 mm off the console wall.  One
+# millimetre is a credit the cut has actually earned.
+ALIGNMENT_CREDIT_MM = 1.0
+
+# How far a cut line must stay clear of every cut-out (the console, a hatch)
+# to be offered at all.  A cut sliced through a small cut-out leaves notched
+# seam edges -- measured 2.5, 8.5 and 22 mm notches on real pieces -- and a
+# 17 mm crescent where one grazed the round cut-out.  30 mm keeps the kerf and
+# the cut-out apart without ruling out the console-wall runs, which sit
+# alongside the wall rather than across it.
+CUTOUT_CLEARANCE_MM = 30.0
+
+# How deep into a cut-out a line must reach before it counts as slicing it
+# rather than running on its rim.  A full-span line placed at a wall's own
+# offset still clips a millimetre or two of the cut-out's interior wherever
+# the fitted wall changes angle, and that is the deliberate, tidy cut -- so
+# the crossing test runs against the cut-out shrunk by this much, and only a
+# line that reaches PAST the rim is refused.
+CUTOUT_NOTCH_MM = 8.0
+
+# A cut-out this big is a structural opening -- the console -- not a hatch.
+# Seams legitimately run into its walls and continue (a full-span cut crosses
+# it, which is how the deck is actually joined around a console), so the
+# no-slicing rule does not apply to it; it exists for the small rectangular
+# cut-outs (2.5 to 22 mm notches) and the round one (a 17 mm crescent), which
+# are the ones a cut slices into fiddly pieces.  400 mm is well past the
+# reference boat's 108 x 73 hatches and 207 mm round cut-out, and well under
+# its 1125 mm console.
+BIG_CUTOUT_MM = 400.0
 
 # Bands are measured against the envelope less this margin.  The search cuts a
 # polygon sampled at `PROXY_SAMPLE_STEP_MM` while production re-cuts it at
@@ -296,6 +334,17 @@ MAX_CUT_SETS = 300_000
 # Share of the time budget the search itself may use.  The rest pays for the
 # exact confirmations, which are the only numbers the user is ever shown.
 SEARCH_SHARE = 0.7
+
+# ...and the share the candidate shortlists get, ahead of the search and out of
+# their own pocket.  Under one shared deadline a short request never reached
+# the search at all: it spent the clock cutting candidates and confirmed the
+# one arrangement it had time to build.
+CANDIDATE_SHARE = 0.35
+
+# How many arrangements an out-of-time search must have evaluated before its
+# answer may replace the seams the run already has.  A search that ran to
+# completion is exempt however few it took -- finishing IS the look.
+MIN_MATURE_EVALUATIONS = 50
 
 # A hard ceiling on the number of arrangements evaluated, on top of the clock.
 # It is what makes the answer repeatable: a search that stops when the clock
@@ -477,7 +526,15 @@ class _Panel:
     tidy_candidates: list[tuple[Cut, ...]] = field(default_factory=list)
     pieces_cache: dict[tuple[Cut, ...], "_Split"] = field(default_factory=dict)
     length_cache: dict[tuple[str, float], float] = field(default_factory=dict)
-    edge_cache: dict[str, tuple[float, ...]] = field(default_factory=dict)
+    edge_cache: dict[str, tuple[tuple[float, float], ...]] = field(default_factory=dict)
+    # The panel's cut-outs as polygons at the proxy step, built once, so the
+    # candidate filter can keep cuts clear of them without resampling a loop
+    # per candidate.  The shrunk copies are the same polygons eroded by
+    # CUTOUT_NOTCH_MM -- eroding is a GEOS call, and doing it per candidate
+    # position (hundreds per direction) once cost the whole candidate budget
+    # and landed the panel on the unfiltered even-band fallback instead.
+    hole_polygons: list = field(default_factory=list)
+    shrunk_holes: list = field(default_factory=list)
 
     @property
     def width_mm(self) -> float:
@@ -571,13 +628,18 @@ class _Layout:
         and no amount of saved material -- or tidiness -- buys it off.  Then
         sheets, for the same reason: `seam_tidiness_weight` sits INSIDE the
         third term and so cannot reach either of the first two, whatever it is
-        set to.  Then the blended cost, then the number of joins, then how much
-        joining there is.  The cut positions come last so that two arrangements
-        equal on every count still order the same way on every run.
+        set to.  Then the blended cost, then the number of joins, then the
+        number of PIECES (four extra fiddly parts used to be free so long as
+        the waste moved a twentieth of a point -- a join somebody cuts and a
+        part somebody handles is worth ranking even when it is not worth
+        pricing), then how much joining there is.  The cut positions come last
+        so that two arrangements equal on every count still order the same way
+        on every run.
         """
 
         return (len(self.oversize), self.sheets, _waste_bucket(self.cost_percent),
-                self.seam_count, round(self.seam_length_mm, 3), _cuts_key(self.cuts))
+                self.seam_count, self.piece_count,
+                round(self.seam_length_mm, 3), _cuts_key(self.cuts))
 
     @property
     def waste_key(self) -> tuple:
@@ -589,7 +651,8 @@ class _Layout:
         """
 
         return (len(self.oversize), self.sheets, _waste_bucket(self.waste * 100.0),
-                self.seam_count, round(self.seam_length_mm, 3), _cuts_key(self.cuts))
+                self.seam_count, self.piece_count,
+                round(self.seam_length_mm, 3), _cuts_key(self.cuts))
 
 
 def _waste_bucket(cost_percent: float) -> int:
@@ -641,11 +704,15 @@ class _Placed:
 
 
 def _panel_edges(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.ndarray],
-                 options: dict[str, Any]) -> tuple[float, ...]:
+                 options: dict[str, Any]) -> tuple[tuple[float, float], ...]:
     """`_edge_offsets` for one panel and direction, worked out once.
 
-    The search asks for these on every candidate it scores and they never
-    change, and walking every segment of a deck panel's outline is not free.
+    Each entry is (offset, LENGTH): the search asks for these on every
+    candidate it scores and they never change, and walking every segment of a
+    deck panel's outline is not free.  The length rides along because an edge
+    only counts as "the cut runs on it" when it is at least as long as the cut
+    -- a 40 mm stub beside a 900 mm join was never what the user meant by
+    aligned, however square it is.
     """
 
     cached = panel.edge_cache.get(direction)
@@ -657,12 +724,14 @@ def _panel_edges(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.nd
 
 def _placed(panel: _Panel, direction: str, offset_mm: float,
             masters: tuple[np.ndarray, np.ndarray], options: dict[str, Any]) -> _Placed:
+    chord = _chord_mm(panel, direction, offset_mm, masters)
     edges = _panel_edges(panel, direction, masters, options)
-    gap = min((abs(offset_mm - edge) for edge in edges), default=float("inf"))
+    gap = min((abs(offset_mm - offset) for offset, length in edges if length >= chord),
+              default=float("inf"))
     return _Placed(
         direction=direction, panel_id=panel.panel_id, offset_mm=offset_mm,
         boat_mm=offset_mm - panel.boat_shift_mm,
-        chord_mm=_chord_mm(panel, direction, offset_mm, masters),
+        chord_mm=chord,
         edge_gap_mm=float(gap),
     )
 
@@ -706,10 +775,14 @@ def _symmetry(placed: Sequence[_Placed], centre_mm: float | None) -> float | Non
 def _alignment(placed: Sequence[_Placed], options: dict[str, Any]) -> float | None:
     """What share of the cutting runs along an edge that was there anyway.
 
-    A cut within `seam_snap_offset_mm` of a fitted edge running its way scores
-    1, because the seam corrector will slide it onto that edge and it will be
-    cut there; anything further scores 0.  See the note beside the constants
-    for why this is a step and not a slope.
+    A cut within `ALIGNMENT_CREDIT_MM` of a fitted edge running its way scores
+    1, anything further scores 0.  The window is no longer the corrector's
+    slide reach, because these seams are placed with snap=False and the
+    corrector never moves them: a credit the cut has not earned is exactly how
+    "on fitted edges" came to mean 4 to 9 mm off the console wall.  A step and
+    not a slope, for the reasons the old note gave: the user's complaint is
+    that a near miss reads as sloppy, so it must not be rewarded as a partial
+    success.
 
     Weighted by chord length again, so aligning the long seam that runs past
     the console is worth more than aligning a short one that runs past nothing
@@ -718,12 +791,11 @@ def _alignment(placed: Sequence[_Placed], options: dict[str, Any]) -> float | No
 
     if not placed:
         return None
-    reach = float(options["seam_snap_offset_mm"])
     total_weight = 0.0
     total = 0.0
     for item in placed:
         weight = max(item.chord_mm, 1.0)
-        total += weight * (1.0 if item.edge_gap_mm <= reach else 0.0)
+        total += weight * (1.0 if item.edge_gap_mm <= ALIGNMENT_CREDIT_MM else 0.0)
         total_weight += weight
     return total / total_weight if total_weight else None
 
@@ -926,13 +998,20 @@ def optimise(run_dir: Path, config: dict[str, Any], progress: Progress | None = 
     # candidate arrangement of every panel for real -- and it used to run
     # outside the budget entirely, so a five second request measured six
     # seconds and an eight second request measured sixteen doing identical
-    # work. A panel that runs out of clock keeps whatever shortlist it has and
+    # work.  A panel that runs out of clock keeps whatever shortlist it has and
     # the search carries on with that; a partial shortlist is a smaller search,
     # not a wrong answer, because every arrangement is confirmed exactly later.
+    #
+    # The candidates get their own slice of the budget now rather than sharing
+    # the search's: under one shared deadline a short request spent the whole
+    # clock building candidates, searched one arrangement, and reported it as
+    # an improvement over whatever the run had.
     deadline = started + float(time_budget_s)
+    candidate_deadline = min(deadline - 1.5 * exact_cost_s,
+                             started + float(time_budget_s) * CANDIDATE_SHARE)
     search_deadline = min(deadline - 1.5 * exact_cost_s,
                           started + float(time_budget_s) * SEARCH_SHARE)
-    _plan_candidates(panels, masters, rotation, options, say, search_deadline, centre_mm)
+    _plan_candidates(panels, masters, rotation, options, say, candidate_deadline, centre_mm)
 
     search_started = time.monotonic()
     evaluated, ranked, budget_hit = _search(panels, masters, rotation, options,
@@ -980,11 +1059,28 @@ def optimise(run_dir: Path, config: dict[str, Any], progress: Progress | None = 
         seams = _seams_for(panels, layout, masters)
         say(f"Checking {_layout_words(layout)} with the real cut settings")
         exact = _confirm(run_dir, config, seams, options, panels, masters, centre_mm)
+        # Keep the guard honest with the WORST confirmation seen, not the
+        # first: the before-measurement ran on the run's own seams, and a
+        # candidate that cuts the deck into holed pieces can cost several
+        # times that.  The loop used to trust the cheap estimate and run every
+        # confirmation, which took a short-budget press two and a half times
+        # over its clock.
+        exact_cost_s = max(exact_cost_s, float(exact["elapsed_s"]))
         confirmed.append((_exact_key(exact), exact, seams, layout))
     confirmed.sort(key=lambda item: item[0])
     _key, after, seams, layout = confirmed[0]
 
     improved = _exact_key(after) < _exact_key(before)
+    # A search that ran out of CLOCK before it had a real look must not replace
+    # the fabricator's seams with the first arrangement it built (a five second
+    # request used to overwrite a hand layout with a five-sheet even split).
+    # A search that FINISHED -- however few arrangements that took -- has had
+    # its look, so only an out-of-time search is held to the minimum.
+    immature = budget_hit and evaluated < MIN_MATURE_EVALUATIONS
+    if improved and immature:
+        improved = False
+        say(f"Only {evaluated} arrangement(s) were tried before the time ran out -- "
+            "not enough of a look to replace the seams this run already has.")
     say(_headline("Best found", after))
     if not improved:
         say("That is no better than the seams this run already has, so nothing needs changing.")
@@ -1088,7 +1184,8 @@ def _reason(status: str, after: dict[str, Any], improved: bool) -> str:
 
 def _headline(prefix: str, metrics: dict[str, Any]) -> str:
     return (f"{prefix}: {metrics['sheet_count']} sheet(s), {metrics['waste_percent']:.1f}% waste, "
-            f"{metrics['seam_count']} seam(s), {len(metrics['oversize'])} piece(s) too big, "
+            f"{metrics['seam_count']} seam(s), {metrics['piece_count']} piece(s), "
+            f"{len(metrics['oversize'])} piece(s) too big, "
             f"{_shape_words(metrics)}")
 
 
@@ -1173,7 +1270,13 @@ def _read_panels(loops: dict[int, list[Loop]], rotation: np.ndarray,
                     float(sheet_xy[:, 1].min()), float(sheet_xy[:, 1].max())),
             area_mm2=float(polygon.area),
             boat_shift_mm=0.0 if offset is None else float(np.dot(rotation[0], offset)),
+            hole_polygons=[
+                Polygon(sheets_mod.sample_loop(hole, PROXY_SAMPLE_STEP_MM)[0])
+                for hole in holes
+            ],
         ))
+    for panel in panels:
+        panel.shrunk_holes = [hole.buffer(-CUTOUT_NOTCH_MM) for hole in panel.hole_polygons]
     return panels
 
 
@@ -1249,8 +1352,8 @@ def _band_efficiency(width: float, usable: float, spacing: float) -> float:
 
 
 def _edge_offsets(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.ndarray],
-                  options: dict[str, Any]) -> list[float]:
-    """Offsets of fitted edges that already run in the cut's direction.
+                  options: dict[str, Any]) -> list[tuple[float, float]]:
+    """(offset, length) of fitted edges that already run in the cut's direction.
 
     A cut along a console edge or the straight run of a coaming looks
     deliberate, meets the material where there is an edge anyway, and is the cut
@@ -1266,7 +1369,7 @@ def _edge_offsets(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.n
     limit = math.cos(math.radians(EDGE_TOLERANCE_DEG))
     minimum = float(options["seam_snap_min_ref_length_mm"])
 
-    offsets: list[float] = []
+    offsets: list[tuple[float, float]] = []
     for loop in [panel.outer, *panel.holes]:
         xy = loop.xy
         bulges = loop.bulges
@@ -1282,7 +1385,7 @@ def _edge_offsets(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.n
                 continue
             if abs(float(np.dot(span / length, wanted))) < limit:
                 continue
-            offsets.append(float(np.dot((p0 + p1) / 2.0, normal)))
+            offsets.append((float(np.dot((p0 + p1) / 2.0, normal)), length))
     return offsets
 
 
@@ -1348,7 +1451,7 @@ def _positions(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.ndar
         for index in range(count):
             values.add(lo + span * (index + 1) / (count + 1))
 
-    for offset in _panel_edges(panel, direction, masters, options):
+    for offset, _length in _panel_edges(panel, direction, masters, options):
         values.add(offset)
 
     # The mirror, in this panel's own sheet frame.  The centreline is stored in
@@ -1400,7 +1503,103 @@ def _positions(panel: _Panel, direction: str, masters: tuple[np.ndarray, np.ndar
         return _thinned(inside, reasoned, limit)
     floor = min(MIN_CUT_LENGTH_MM, 0.5 * max(chords))
     kept = [value for value, chord in zip(inside, chords) if chord >= floor]
+    # And drop the positions whose cut line runs through or beside a cut-out.
+    # A full-span cut sliced through the small hatch left 2.5 to 22 mm notches
+    # in the seam edges of the finished pieces; the clearance keeps the kerf
+    # and the cut-out apart.
+    kept = [value for value in kept
+            if _clear_of_cutouts(panel, direction, value, masters, options)]
     return _thinned(kept, reasoned, limit)
+
+
+def _cut_line(panel: _Panel, direction: str, offset: float,
+              masters: tuple[np.ndarray, np.ndarray]) -> LineString:
+    """The full-span cut line at `offset`, anchored where it can always reach.
+
+    The line used to be anchored at the foot of the perpendicular from the
+    placed-frame ORIGIN, and a panel nested two and a half metres down the
+    layout spanned a stretch of that line further than the bbox-diagonal reach
+    extended -- so a far-nested panel that needed a seam was never cut, and the
+    seam that claimed to cut it floated in open water beside it.  Anchoring at
+    the bbox centre's own foot on the line makes the diagonal-plus-ten reach
+    cover the panel from anywhere.
+    """
+
+    along, across = masters
+    unit = along if direction == ALONG else across
+    normal = across if direction == ALONG else along
+    min_x, min_y, max_x, max_y = panel.polygon.bounds
+    middle = np.array([(min_x + max_x) / 2.0, (min_y + max_y) / 2.0])
+    centre = normal * offset + unit * float(np.dot(middle, unit))
+    reach = float(math.hypot(max_x - min_x, max_y - min_y)) + 10.0
+    return LineString([centre - unit * reach, centre + unit * reach])
+
+
+def _clear_of_cutouts(panel: _Panel, direction: str, offset: float,
+                      masters: tuple[np.ndarray, np.ndarray],
+                      options: dict[str, Any]) -> bool:
+    """Does the cut line at `offset` treat this panel's cut-outs properly?
+
+    Two ways to fail, from two measured defects:
+
+      * the line CROSSES a cut-out's interior -- a full-span cut sliced
+        through the small hatch left 2.5 to 22 mm notches in the seam edges of
+        the finished pieces.  A line lying exactly ON a wall does not cross
+        anything (it meets the boundary, not the interior) and is the
+        deliberate, tidy cut, so it survives;
+      * the line passes within `CUTOUT_CLEARANCE_MM` of a cut-out that has no
+        wall running the cut's way -- grazing the round cut-out like that left
+        a 17 mm crescent -- so it is dropped unless the cut-out is square to
+        it somewhere (the console is, in both directions).
+    """
+
+    if not panel.holes:
+        return True
+    line = _cut_line(panel, direction, offset, masters)
+    along, across = masters
+    wanted = along if direction == ALONG else across
+    minimum = float(options["seam_snap_min_ref_length_mm"])
+    if not panel.shrunk_holes:
+        panel.shrunk_holes = [hole.buffer(-CUTOUT_NOTCH_MM) for hole in panel.hole_polygons]
+    for hole_loop, hole_polygon, shrunk in zip(panel.holes, panel.hole_polygons, panel.shrunk_holes):
+        # A structural opening (the console) is exempt: seams run into its
+        # walls and continue; refusing to cross it would leave the deck
+        # uncuttable by full-span guillotines at all.
+        min_x, min_y, max_x, max_y = hole_polygon.bounds
+        if max(max_x - min_x, max_y - min_y) >= BIG_CUTOUT_MM:
+            continue
+        # Slicing: the line reaches past the cut-out's rim into its shrunken
+        # interior.  A line ON a wall only ever clips the rim -- fitted walls
+        # change angle by fractions of a degree -- and that is the tidy cut.
+        if not shrunk.is_empty and line.crosses(shrunk):
+            return False
+        if (line.distance(hole_polygon) < CUTOUT_CLEARANCE_MM
+                and not _loop_runs_with(hole_loop, wanted, minimum)):
+            return False
+    return True
+
+
+def _loop_runs_with(hole: Loop, wanted: np.ndarray, minimum_length: float) -> bool:
+    """Does this loop have a straight segment running in `wanted`'s direction?
+
+    A cut-out with such a segment has a wall the cut can run alongside; a
+    round cut-out has none, and nothing about it is ever 'square' to a cut.
+    """
+
+    xy = hole.xy
+    bulges = hole.bulges
+    count = len(xy)
+    limit = math.cos(math.radians(EDGE_TOLERANCE_DEG))
+    for index in range(count):
+        if abs(float(bulges[index])) > 1e-12:
+            continue
+        span = xy[(index + 1) % count] - xy[index]
+        length = float(math.hypot(*span))
+        if length < minimum_length:
+            continue
+        if abs(float(np.dot(span / length, wanted))) >= limit:
+            return True
+    return False
 
 
 def _thinned(positions: Sequence[float], reasoned: set[float], limit: int | None) -> list[float]:
@@ -1709,6 +1908,15 @@ def _plan_candidates(panels: Sequence[_Panel], masters: tuple[np.ndarray, np.nda
                                               needs_cuts, centre_mm)
         across_sets, across_tidy = _ranked_sets(panel, ACROSS, masters, options,
                                                 needs_cuts, centre_mm)
+        # A direction whose every arrangement would slice a cut-out (this
+        # boat's console is L-shaped enough that no clean full-span along cut
+        # exists) used to zero out BOTH directions' combinations -- the pairs
+        # loop had nothing to walk -- and the panel then fell back to even
+        # bands, which slice.  Offering "no cuts in that direction" keeps the
+        # honest arrangements searchable; the envelope test in `_evaluate`
+        # still judges the result.
+        along_sets = along_sets or [()]
+        across_sets = across_sets or [()]
 
         def pairs(along: Sequence[tuple[float, ...]],
                   across: Sequence[tuple[float, ...]]) -> list[tuple[Cut, ...]]:
@@ -1981,14 +2189,9 @@ def _split(panel: _Panel, cuts: tuple[Cut, ...], masters: tuple[np.ndarray, np.n
     polygon = panel.polygon
 
     if cuts:
-        min_x, min_y, max_x, max_y = polygon.bounds
-        reach = float(math.hypot(max_x - min_x, max_y - min_y)) + 10.0
         kerfs = []
         for cut in cuts:
-            direction = along if cut.is_along else across
-            normal = across if cut.is_along else along
-            centre = normal * cut.offset_mm
-            kerfs.append(LineString([centre - direction * reach, centre + direction * reach])
+            kerfs.append(_cut_line(panel, cut.direction, cut.offset_mm, masters)
                          .buffer(gap / 2.0, cap_style=2, join_style=2))
         remainder = polygon.difference(unary_union(kerfs))
         if remainder.is_empty:
@@ -2073,14 +2276,7 @@ def _chord_mm(panel: _Panel, direction: str, offset: float,
     cached = panel.length_cache.get(key)
     if cached is not None:
         return cached
-    along, across = masters
-    unit = along if direction == ALONG else across
-    normal = across if direction == ALONG else along
-    min_x, min_y, max_x, max_y = panel.polygon.bounds
-    reach = float(math.hypot(max_x - min_x, max_y - min_y)) + 10.0
-    centre = normal * offset
-    line = LineString([centre - unit * reach, centre + unit * reach])
-    length = float(panel.polygon.intersection(line).length)
+    length = float(panel.polygon.intersection(_cut_line(panel, direction, offset, masters)).length)
     panel.length_cache[key] = length
     return length
 
@@ -2363,7 +2559,7 @@ def _seams_for(panels: Sequence[_Panel], layout: _Layout,
                 seam_id=f"auto-{panel_id}-{cut.direction}-{counts[cut.direction]}",
                 x1=float(start[0]), y1=float(start[1]),
                 x2=float(end[0]), y2=float(end[1]),
-                panel_id=panel_id, snap=True,
+                panel_id=panel_id, snap=False,
                 raw=(float(start[0]), float(start[1]), float(end[0]), float(end[1])),
                 mode=cut.direction, angle_deg=None,
             ))
@@ -2373,14 +2569,23 @@ def _seams_for(panels: Sequence[_Panel], layout: _Layout,
 def _span(panel: _Panel, centre: np.ndarray, direction: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Where a cut line enters and leaves a panel.
 
+    The line is the one through `centre` along `direction`, but its trial
+    segment is anchored at the bbox centre's own foot on that line -- the same
+    fix as `_cut_line`, for the same reason: a line anchored at the passed-in
+    `centre` could sit further along its own direction than the bbox-diagonal
+    reach extends, and on a far-nested panel the span then fell back to bounds
+    that float in open water.
+
     Falls back to the panel's bounding extent when the clip comes back empty,
     which it can for a cut that only grazes a corner: the seam still has to have
     two ends, and a zero-length seam would be dropped by everything downstream.
     """
 
     min_x, min_y, max_x, max_y = panel.polygon.bounds
+    middle = np.array([(min_x + max_x) / 2.0, (min_y + max_y) / 2.0])
+    anchor = centre + direction * float(np.dot(middle - centre, direction))
     reach = float(math.hypot(max_x - min_x, max_y - min_y)) + 10.0
-    line = LineString([centre - direction * reach, centre + direction * reach])
+    line = LineString([anchor - direction * reach, anchor + direction * reach])
     clipped = panel.polygon.intersection(line)
     if not clipped.is_empty:
         parts = list(getattr(clipped, "geoms", [clipped]))
@@ -2391,7 +2596,7 @@ def _span(panel: _Panel, centre: np.ndarray, direction: np.ndarray) -> tuple[np.
                     distances.append(float(np.dot(point[:2] - centre, direction)))
         if distances:
             return centre + direction * min(distances), centre + direction * max(distances)
-    return centre - direction * reach, centre + direction * reach
+    return anchor - direction * reach, anchor + direction * reach
 
 
 # --------------------------------------------------------------------------
@@ -2561,4 +2766,5 @@ def _exact_key(metrics: dict[str, Any]) -> tuple:
     """
 
     return (len(metrics["oversize"]), metrics["sheet_count"],
-            _waste_bucket(metrics["cost_percent"]), metrics["seam_count"])
+            _waste_bucket(metrics["cost_percent"]), metrics["seam_count"],
+            metrics["piece_count"])

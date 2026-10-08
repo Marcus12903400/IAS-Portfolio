@@ -51,7 +51,7 @@ from pathlib import Path
 # What the page must say it is.  The shortcut starts this version and the
 # fabricator has been told to look for it, so it is checked in the title and in
 # the header, which are the two places anyone actually reads it.
-VERSION = "5.3"
+VERSION = "5.4"
 # The four steps of section 4, in the order the work happens.  Checked as a list
 # rather than by presence, because "all four headings exist" is also true of the
 # pile they replaced.
