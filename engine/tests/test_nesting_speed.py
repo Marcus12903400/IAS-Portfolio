@@ -27,7 +27,7 @@ proving the one thing it is here to prove.  That has happened once: circular
 parts and circular cut-outs are written to DXF as two-vertex bulged polylines,
 `sheets.read_fitted_dxf` used to drop every one of them, and both cached runs
 turned out to be missing a 187 mm round part (P5) and a 207 mm round cut-out in
-panel 1.  Both runs were re-captured under `ecb7b30`'s nester with those loops
+panel 1.  Both runs were re-captured under `ecb7b30`'s nester (that commit is `958d8f0` since the 2026-10-07 history rewrite) with those loops
 restored, and the current nester reproduces the result bit for bit.
 
 The seams are PINNED here as data rather than read from each run's own
